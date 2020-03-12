@@ -160,12 +160,32 @@ if test "$bird_cflags_default" = yes ; then
   BIRD_ADD_GCC_OPTION([bird_cv_c_option_wno_missing_init], [-Wno-missing-field-initializers])
 fi
 
+AC_SEARCH_LIBS([sqrt], [m], [], [AC_MSG_ERROR([math library not found)])])
+AC_SEARCH_LIBS([json_object_from_file], [json-c], [], [AC_MSG_ERROR([json-c library not found)])])
+AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([rt library not found)])])
+
+AC_ARG_VAR([LIBUBPF], [Location of libubpf])
+AC_ARG_VAR([HUBPF], [Header loctation of libubpf])
+
+AS_IF([test "$LIBUBPF" != "no"],
+	  [LDFLAGS="-L${LIBUBPF} ${LDFLAGS}"],
+	  [])
+
+AS_IF([test "HUBPF" != "no"],
+      [CFLAGS="$CFLAGS -I${HUBPF}"],
+      [])
 
 AC_MSG_CHECKING([CFLAGS])
 AC_MSG_RESULT([$CFLAGS])
 
 AC_MSG_CHECKING([LDFLAGS])
 AC_MSG_RESULT([$LDFLAGS])
+
+AC_CHECK_HEADER([public_bpf.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+
+AC_CHECK_LIB([ubpf], [init_plugin_manager],
+               [], [AC_MSG_ERROR([libubpf not found (use LIBUBPF variable to include it)])],
+               [])
 
 AC_PROG_CPP
 AC_PROG_INSTALL

@@ -1,0 +1,26 @@
+{
+  "jit_all": false,
+  "plugins": {
+    "bgp_med_decision": {
+      "extra_mem": 512,
+      "shared_mem": 0,
+      "replace": {
+        "path": "compare_med.o"
+      }
+    },
+    "bgp_decode_attr": {
+      "extra_mem": 512,
+      "shared_mem": 0,
+      "replace": {
+        "path": "receive_attr.o"
+      }
+    },
+    "bgp_encode_attr": {
+      "extra_mem": 512,
+      "shared_mem": 0,
+      "replace": {
+        "path": "write_attr.o"
+      }
+    }
+  }
+}

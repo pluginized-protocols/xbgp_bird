@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <libgen.h>
 
+
 #include "nest/bird.h"
 #include "lib/lists.h"
 #include "lib/resource.h"
@@ -37,9 +38,28 @@
 #include "conf/conf.h"
 #include "filter/filter.h"
 #include "filter/data.h"
+#include "public.h"
+#include "proto/bgp/ubpf_bgp.h"
+#include <limits.h>
 
 #include "unix.h"
 #include "krt.h"
+
+
+static proto_ext_fun_t funcs[] = {
+        {.fn = add_attr, .name="add_attr"},
+        {.fn = get_attr, .name="get_attr"},
+        {.fn = write_to_buffer, .name="write_to_buffer"},
+        {.fn = get_attr_by_code_from_rte, .name = "get_attr_by_code_from_rte"},
+        proto_ext_func_null
+};
+
+static plugin_info_t plugins[] = {
+        {.plugin_id = BGP_MED_DECISION, .plugin_str="bgp_med_decision"},
+        {.plugin_id = BGP_DECODE_ATTR, .plugin_str="bgp_decode_attr"},
+        {.plugin_id = BGP_ENCODE_ATTR, .plugin_str="bgp_encode_attr"},
+        plugin_info_null
+};
 
 /*
  *	Debugging
@@ -586,6 +606,7 @@ sysdep_shutdown_done(void)
 {
   unlink_pid_file();
   unlink(path_control_socket);
+  ubpf_terminate();
   log_msg(L_FATAL "Shutdown completed");
   exit(0);
 }
@@ -630,6 +651,13 @@ handle_sigterm(int sig UNUSED)
   async_shutdown_flag = 1;
 }
 
+static void
+handle_sigint (int sig UNUSED)
+{
+    DBG("Caught SIGINT...\n");
+    async_shutdown_flag = 1;
+}
+
 void watchdog_sigalrm(int sig UNUSED);
 
 static void
@@ -650,6 +678,9 @@ signal_init(void)
   sa.sa_handler = watchdog_sigalrm;
   sa.sa_flags = 0;
   sigaction(SIGALRM, &sa, NULL);
+  sa.sa_handler = handle_sigint;
+  sa.sa_flags = SA_RESTART;
+  sigaction(SIGINT, &sa, NULL);
   signal(SIGPIPE, SIG_IGN);
 }
 
@@ -902,6 +933,38 @@ main(int argc, char **argv)
       dup2(0, 1);
       dup2(0, 2);
     }
+
+  /* init ubpf_manager */
+  char copied_conf_file[PATH_MAX];
+  memset(copied_conf_file, 0, sizeof(char) * PATH_MAX);
+  strncpy(copied_conf_file, PATH_CONFIG_FILE, PATH_MAX-1);
+
+  char *config_dir = dirname(copied_conf_file);
+  char *manifest_path = calloc(PATH_MAX, sizeof(char));
+  char *real_manifest_path = calloc(PATH_MAX, sizeof(char));
+  char *backup = real_manifest_path;
+
+  if (!manifest_path) {
+      free(manifest_path);
+      free(real_manifest_path);
+      die("Memalloc failed");
+  }
+  snprintf(manifest_path, PATH_MAX - 14, "%s/manifest.json", config_dir);
+
+  backup = realpath(manifest_path, real_manifest_path);
+
+  if (!backup) bug("Cannot resolve manifes path");
+  if (init_plugin_manager(funcs, config_dir, strnlen(config_dir, 2048),
+                          plugins, NULL, NULL, 0) != 0)
+      die("Cannot init plugin manager");
+
+  if(load_plugin_from_json(real_manifest_path, config_dir, strnlen(config_dir, FILENAME_MAX)) != 0) {
+      die("Unable to load plugins");
+  }
+
+  free(manifest_path);
+  free(real_manifest_path);
+  /* initialisation done */
 
   main_thread_init();
 

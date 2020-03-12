@@ -11,6 +11,8 @@
 #undef LOCAL_DEBUG
 
 #include <stdlib.h>
+#include <public.h>
+#include <stdio.h>
 
 #include "nest/bird.h"
 #include "nest/iface.h"
@@ -23,6 +25,7 @@
 #include "lib/unaligned.h"
 
 #include "bgp.h"
+#include "ubpf_bgp.h"
 
 /*
  *   UPDATE message error handling
@@ -1184,8 +1187,23 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
 
   if (bgp_attr_known(code))
     return bgp_attr_table[code].encode(s, a, buf, size);
-  else
-    return bgp_encode_raw(s, a, buf, size);
+  else {
+
+      bpf_args_t args[] = {
+              [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
+              [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
+              [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
+              [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE}
+      };
+
+      CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 4, ret_val_check_encode_attr, {
+          fprintf(stderr, "Unsuccessful encoding\n");
+          return bgp_encode_raw(s, a, buf, size);
+      }, {
+          fprintf(stderr, "Encoding succeeded !\n");
+          return VM_RETURN_VALUE; // number of bytes written
+      })
+  }
 }
 
 /**
@@ -1275,10 +1293,21 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
   }
   else /* Unknown attribute */
   {
-    if (!(flags & BAF_OPTIONAL))
-      WITHDRAW("Unknown attribute (code %u) - conflicting flags (%02x)", code, flags);
+      bpf_args_t args[] = {
+              [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = UNSIGNED_INT},
+              [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = UNSIGNED_INT},
+              [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = BYTE_ARRAY},
+              [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = UNSIGNED_INT},
+              [4] = {.arg = to, .len = sizeof(to), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+              [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
+      };
+      CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, sizeof(args) / sizeof(args[0]), ret_val_check_decode, {
+          fprintf(stderr, "Error :'(\n");
+          if (!(flags & BAF_OPTIONAL))
+              WITHDRAW("Unknown attribute (code %u) - conflicting flags (%02x)", code, flags);
 
-    bgp_decode_unknown(s, code, flags, data, len, to);
+          bgp_decode_unknown(s, code, flags, data, len, to);
+      })
   }
 }
 
@@ -1862,6 +1891,10 @@ rte_stale(rte *r)
 int
 bgp_rte_better(rte *new, rte *old)
 {
+    bpf_args_t this[] = {
+            {.arg = new, .len = sizeof(rte), .kind = kind_ptr, .type = BGP_ROUTE},
+            {.arg = old, .len = sizeof(rte), .kind = kind_ptr, .type = BGP_ROUTE},
+    };
   struct bgp_proto *new_bgp = (struct bgp_proto *) new->attrs->src->proto;
   struct bgp_proto *old_bgp = (struct bgp_proto *) old->attrs->src->proto;
   eattr *x, *y;
@@ -1946,14 +1979,25 @@ bgp_rte_better(rte *new, rte *old)
   if (new_bgp->cf->med_metric || old_bgp->cf->med_metric ||
       (bgp_get_neighbor(new) == bgp_get_neighbor(old)))
   {
-    x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_MULTI_EXIT_DISC));
-    y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_MULTI_EXIT_DISC));
-    n = x ? x->u.data : new_bgp->cf->default_med;
-    o = y ? y->u.data : old_bgp->cf->default_med;
-    if (n < o)
-      return 1;
-    if (n > o)
-      return 0;
+      CALL_REPLACE_ONLY(BGP_MED_DECISION, this, 2, ret_val_med_decision, {
+          x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_MULTI_EXIT_DISC));
+          y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_MULTI_EXIT_DISC));
+          n = x ? x->u.data : new_bgp->cf->default_med;
+          o = y ? y->u.data : old_bgp->cf->default_med;
+          if (n < o)
+              return 1;
+          if (n > o)
+              return 0;
+      }, {
+        switch (VM_RETURN_VALUE) {
+            case RTE_NEW:
+              return 1;
+            case RTE_OLD:
+              return 0;
+            default:
+              break;
+        }
+      })
   }
 
   /* RFC 4271 9.1.2.2. d) Prefer external peers */
