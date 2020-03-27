@@ -50,7 +50,7 @@ static int UNUSED ret_val_med_decision(uint64_t val) {
     }
 }
 
-int add_attr(context_t *ctx, uint code, uint flags, uint8_t *decoded_attr);
+int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *decoded_attr);
 
 struct path_attribute *get_attr(context_t *ctx);
 

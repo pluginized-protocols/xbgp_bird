@@ -7,7 +7,7 @@
 
 #include "ubpf_api_common.h"
 
-int add_attr(uint code, uint flags, uint8_t *decoded_attr);
+int add_attr(uint code, uint flags, uint16_t length, uint8_t *decoded_attr);
 
 struct path_attribute *get_attr();
 

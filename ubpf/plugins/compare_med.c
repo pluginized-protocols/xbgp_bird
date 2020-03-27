@@ -38,18 +38,24 @@ uint64_t med_compare(bpf_full_args_t *args __attribute__((unused))) {
     new_attr = get_attr_by_code_from_rte(BA_GEO_TAG, 0);
     old_attr = get_attr_by_code_from_rte(BA_GEO_TAG, 1);
 
-    if (!new_attr || !old_attr) return RTE_UNK;
+    if (!new_attr || !old_attr) {
+        ebpf_print("Wow! Trouble to get attributes");
+        return FAIL;
+    }
 
     new_geo = (geo_tags_t *) new_attr->data;
-    old_geo = (geo_tags_t *) new_attr->data;
+    old_geo = (geo_tags_t *) old_attr->data;
 
     new_dist = euclidean_distance(new_geo->coordinates, this_router_coordinate.coordinates);
     old_dist = euclidean_distance(old_geo->coordinates, this_router_coordinate.coordinates);
 
-    if (new_dist > old_dist)
+    if (new_dist > old_dist){
+        ebpf_print("Old route is kept\n");
         return RTE_OLD;
-    if (new_dist < old_dist)
+    }
+    if (new_dist < old_dist){
+        ebpf_print("New route is used\n");
         return RTE_NEW;
-
+    }
     return RTE_UNK;
 }

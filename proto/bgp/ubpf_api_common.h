@@ -8,6 +8,7 @@
 #define RTE_NEW 0
 #define RTE_OLD 1
 #define RTE_UNK 2
+#define FAIL 3
 
 #define BA_GEO_TAG 0x2a ## u
 

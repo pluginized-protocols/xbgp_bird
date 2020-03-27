@@ -68,7 +68,7 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
 }
 
-int add_attr(context_t *ctx, uint code, uint flags, uint8_t *decoded_attr) {
+int add_attr(context_t *ctx, uint code, uint flags, uint16_t length UNUSED, uint8_t *decoded_attr) {
 
     bpf_full_args_t *args = ctx->args;
 
