@@ -21,11 +21,11 @@ static __always_inline int encode_attr(uint8_t code, uint8_t *buf_in, uint8_t *b
 
             lat = ebpf_htonl(encode_number(((uint32_t *) buf_in)[count]));
             *((uint32_t *)(buf_out + count)) = lat;
-
             count += 4;
 
             lng =  ebpf_htonl(encode_number(((uint32_t *) buf_in)[count]));
             *((uint32_t *)(buf_out + count)) = lng;
+            count += 4;
             break;
         }
         default:
@@ -65,7 +65,7 @@ uint64_t generic_encode_attr(bpf_full_args_t *args __attribute__((unused))) {
     attr_buf[counter++] = attribute->flags;
     attr_buf[counter++] = attribute->code;
 
-    if (attribute->len < 256) attr_buf[counter++] = attribute->len;
+    if (attribute->len < 256) attr_buf[counter++] = (uint8_t) attribute->len;
     else {
         attr_buf[counter] = attribute->len;
         counter += 2;
