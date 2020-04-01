@@ -27,9 +27,9 @@ static __always_inline int decode_attr(uint8_t code, uint16_t len, uint32_t flag
             uint64_t *attr_data;
             attr_data = (uint64_t *) geo_tag;
 
-            raw_latitude = (uint32_t) *data;
+            raw_latitude = *((uint32_t *) data);
             data += 4;
-            raw_longitude = (uint32_t) *data;
+            raw_longitude = *((uint32_t *) data);
 
             raw_latitude = ebpf_ntohl(raw_latitude);
             raw_longitude = ebpf_ntohl(raw_longitude);

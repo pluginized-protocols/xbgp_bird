@@ -58,9 +58,10 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
     attr_path->data = ctx_malloc(ctx, attr_len);
     if (!attr_path->data) return NULL;
+    attr_path->len = attr_len;
 
     if (!is_u32) {
-        memcpy(attr_path->data, oiseau->u.ptr, attr_len);
+        memcpy(attr_path->data, oiseau->u.ptr->data, attr_len);
     } else {
         *attr_path->data = oiseau->u.data;
     }
@@ -68,7 +69,7 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
 }
 
-int add_attr(context_t *ctx, uint code, uint flags, uint16_t length UNUSED, uint8_t *decoded_attr) {
+int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *decoded_attr) {
 
     bpf_full_args_t *args = ctx->args;
 
@@ -80,7 +81,11 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length UNUSED, uint
 
     // this function copy the memory pointed by
     // decoded_attr to the protocol memory
-    bgp_set_attr_data(to, s->pool, code, flags, decoded_attr, 8);
+
+    flags |= 1u; // distinguish pluginized attribute from unknown one
+    // flags will be reinitialized when exporting, see attr.c:bgp_export_attr
+
+    ea_set_attr_data(to, s->pool, EA_CODE(PROTOCOL_BGP, code), flags, EAF_TYPE_OPAQUE, decoded_attr, length);
     return 0;
 }
 
@@ -94,8 +99,8 @@ struct path_attribute *get_attr(context_t *ctx) {
 
     fargs = ctx->args;
     for (i = 0; i < fargs->nargs; i++) {
-        if (fargs[i].args->type == ATTRIBUTE) {
-            bird_attr = fargs[i].args->arg;
+        if (fargs->args[i].type == ATTRIBUTE) {
+            bird_attr = fargs->args[i].arg;
             return bird_to_vm_attr(ctx, bird_attr);
         }
     }
@@ -113,14 +118,14 @@ int write_to_buffer(context_t *ctx, uint8_t *ptr, size_t len) {
     fargs = ctx->args;
     if (fargs->nargs < 4) return -1;
 
-    if (fargs[0].args->type == BUFFER_ARRAY) {
-        buf = fargs[0].args->arg;
+    if (fargs->args[0].type == BUFFER_ARRAY) {
+        buf = fargs->args[0].arg;
     } else {
         return -1;
     }
 
-    if (fargs[1].args->type == UNSIGNED_INT) {
-        remaining_len = *(uint *)fargs[0].args->arg;
+    if (fargs->args[1].type == UNSIGNED_INT) {
+        remaining_len = *(uint *)fargs->args[1].arg;
     } else {
         return -1;
     }

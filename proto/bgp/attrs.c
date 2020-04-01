@@ -1127,11 +1127,16 @@ bgp_export_attr(struct bgp_export_state *s, eattr *a, ea_list *to)
   }
   else
   {
-    /* Don't re-export unknown non-transitive attributes */
-    if (!(a->flags & BAF_TRANSITIVE))
-      return;
+      if (a->flags & 1u) {
+          // pluginized attribute !
+          a->flags &= 0xf0u;
+      } else {
+          /* Don't re-export unknown non-transitive attributes */
+          if (!(a->flags & BAF_TRANSITIVE))
+              return;
 
-    a->flags |= BAF_PARTIAL;
+          a->flags |= BAF_PARTIAL;
+      }
   }
 
   /* Append updated attribute */
@@ -1200,7 +1205,6 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
           fprintf(stderr, "Unsuccessful encoding\n");
           return bgp_encode_raw(s, a, buf, size);
       }, {
-          fprintf(stderr, "Encoding succeeded !\n");
           return VM_RETURN_VALUE; // number of bytes written
       })
   }
@@ -1302,7 +1306,6 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
               [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
       };
       CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, sizeof(args) / sizeof(args[0]), ret_val_check_decode, {
-          fprintf(stderr, "Error :'(\n");
           if (!(flags & BAF_OPTIONAL))
               WITHDRAW("Unknown attribute (code %u) - conflicting flags (%02x)", code, flags);
 

@@ -10,21 +10,23 @@ static __always_inline uint32_t encode_number(int32_t number) {
     return ((uint32_t) number) & 0xffffffffu;
 }
 
-static __always_inline int encode_attr(uint8_t code, uint8_t *buf_in, uint8_t *buf_out) {
+static __always_inline int encode_attr(uint8_t code, const uint8_t *buf_in, uint8_t *buf_out) {
 
     int count = 0;
 
     switch (code) {
-        case BA_GEO_TAG:{
-            uint32_t lat;
-            uint32_t lng;
+        case BA_GEO_TAG: {
+            uint32_t lat, raw_lat;
+            uint32_t lng, raw_lng;
 
-            lat = ebpf_htonl(encode_number(((uint32_t *) buf_in)[count]));
-            *((uint32_t *)(buf_out + count)) = lat;
+            raw_lat = *((uint32_t *) (buf_in + count));
+            lat = ebpf_ntohl(encode_number(raw_lat));
+            *((uint32_t *) (buf_out + count)) = lat;
             count += 4;
 
-            lng =  ebpf_htonl(encode_number(((uint32_t *) buf_in)[count]));
-            *((uint32_t *)(buf_out + count)) = lng;
+            raw_lng = *((uint32_t *) (buf_in + count));
+            lng = ebpf_htonl(encode_number(raw_lng));
+            *((uint32_t *) (buf_out + count)) = lng;
             count += 4;
             break;
         }
@@ -71,7 +73,7 @@ uint64_t generic_encode_attr(bpf_full_args_t *args __attribute__((unused))) {
         counter += 2;
     }
 
-    ret_val = encode_attr(attribute->code, attribute->data, attr_buf+counter);
+    ret_val = encode_attr(attribute->code, attribute->data, attr_buf + counter);
     if (ret_val == -1) return 0;
 
     counter += ret_val;
