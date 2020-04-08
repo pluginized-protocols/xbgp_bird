@@ -7,7 +7,7 @@
 
 static __always_inline uint32_t encode_number(int32_t number) {
     if (number >= 0) return number;
-    return ((uint32_t) number) & 0xffffffffu;
+    return ((uint32_t)(-number)) | (1u << 31u);
 }
 
 static __always_inline int encode_attr(uint8_t code, const uint8_t *buf_in, uint8_t *buf_out) {
@@ -61,7 +61,7 @@ uint64_t generic_encode_attr(bpf_full_args_t *args __attribute__((unused))) {
     tot_len += attribute->len < 256 ? 1 : 2; // Length hdr
     tot_len += attribute->len;
 
-    attr_buf = ctx_malloc(tot_len);
+    attr_buf = ctx_calloc(1, tot_len);
     if (!attr_buf) return 0;
 
     attr_buf[counter++] = attribute->flags;
