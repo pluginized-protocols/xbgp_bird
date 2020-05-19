@@ -1198,10 +1198,11 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
               [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
               [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
               [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
-              [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE}
+              [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE},
+              [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_INFO},
       };
 
-      CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 4, ret_val_check_encode_attr, {
+      CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 5, ret_val_check_encode_attr, {
           fprintf(stderr, "Unsuccessful encoding\n");
           return bgp_encode_raw(s, a, buf, size);
       }, {
@@ -1675,6 +1676,28 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
   /* Accept non-BGP routes */
   if (src == NULL)
     return 0;
+
+  bpf_args_t args[] = {
+          {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
+          {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_INFO},
+          {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+          {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
+  };
+
+  CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, sizeof(args)/sizeof(args[0]), ret_val_filter, {
+      // ON ERR
+  }, {
+      // ON SUCCESS
+      switch (VM_RETURN_VALUE) {
+          case PLUGIN_FILTER_REJECT:
+              return -1;
+          case PLUGIN_FILTER_ACCEPT:
+              return 0;
+          case PLUGIN_FILTER_UNK:
+          default:
+              break;
+      }
+  })
 
   /* IBGP route reflection, RFC 4456 */
   if (p->is_internal && src->is_internal && (p->local_as == src->local_as))

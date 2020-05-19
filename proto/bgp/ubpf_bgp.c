@@ -4,6 +4,8 @@
 
 #include <tools_ubpf_api.h>
 #include <nest/route.h>
+#include <arpa/inet.h>
+#include <stdio.h>
 #include "public.h"
 #include "ubpf_bgp.h"
 #include "nest/attrs.h"
@@ -37,6 +39,44 @@ static inline int is_u32_attr(word id) {
             return 0;
     }
 
+}
+
+static eattr *eattr_append(struct linpool *pool, ea_list *e, int id) {
+
+    ea_list *a;
+
+    word code = EA_CODE(PROTOCOL_BGP,id);
+
+    while (e) {
+        if (e->attrs->id >  code) break;
+        a = e;
+        e = e->next;
+    }
+
+    ea_list *new = lp_alloc(pool, sizeof(ea_list) + sizeof(eattr));
+    eattr *e_new = &new->attrs[0];
+
+    new->flags = EALF_SORTED;
+    new->count = 1;
+    new->next = NULL;
+    a->next = new;
+
+    new->next = e;
+
+    return e_new;
+}
+
+static void *get_arg_from_type(context_t *ctx, unsigned int type_arg) {
+    int i;
+    bpf_full_args_t *fargs;
+
+    fargs = ctx->args;
+    for (i = 0; i < fargs->nargs; i++) {
+        if (fargs->args[i].type == type_arg) {
+            return fargs->args[i].arg;
+        }
+    }
+    return NULL;
 }
 
 static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oiseau) {
@@ -89,6 +129,52 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     return 0;
 }
 
+int set_attr(context_t *ctx, struct path_attribute *attr) {
+    struct linpool *pool;
+    struct adata *a;
+
+    ea_list *attr_list = NULL;
+    eattr *attr_stored;
+
+    if (!attr) return -1;
+    if (!attr->data) return -1;
+
+    attr_list = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    if (!attr_list) return -1;
+
+    attr_stored = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, attr->code));
+    if (!attr_stored) { // add new attr
+        pool = get_arg_from_type(ctx, HOST_LINPOOL);
+        if (!pool) return -1;
+
+        attr_stored = eattr_append(pool, attr_list, attr->code);
+        attr_stored->id = EA_CODE(PROTOCOL_BGP, attr->code);
+        attr_stored->flags = attr->flags;
+        attr_stored->flags |= 1u; // pluginized attribute.
+        attr_stored->type = EAF_TYPE_OPAQUE;
+
+        a = lp_alloc_adata(pool, attr->len);
+
+        if (!a) return -1;
+
+        memcpy(a->data, attr->data, attr->len);
+        attr_stored->u.ptr = a;
+    } else { // replace existing one
+        attr_stored->flags = attr->flags;
+        if (attr_stored->type & EAF_EMBEDDED) {
+            attr_stored->u.data = *((uint32_t *) attr->data);
+        } else {
+            if (attr_stored->u.ptr->length < attr->len) {
+                return -1;
+            }
+            memcpy(attr_stored->u.ptr->data, attr->data, attr->len);
+        }
+
+        attr_stored->type |= EAF_FRESH;
+    }
+    return 0;
+}
+
 struct path_attribute *get_attr(context_t *ctx) {
 
     int i;
@@ -125,7 +211,7 @@ int write_to_buffer(context_t *ctx, uint8_t *ptr, size_t len) {
     }
 
     if (fargs->args[1].type == UNSIGNED_INT) {
-        remaining_len = *(uint *)fargs->args[1].arg;
+        remaining_len = *(uint *) fargs->args[1].arg;
     } else {
         return -1;
     }
@@ -150,3 +236,87 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
 }
 
 
+static void fill_bgp_info(struct ubpf_peer_info *peer_info, struct bgp_proto *peer_proto, int local) {
+
+    uint32_t h_ipv4;
+    ip6_addr ip6;
+    char addr_str[48];
+
+    peer_info->as = local ? peer_proto->public_as : peer_proto->remote_as;
+    peer_info->router_id = local ? peer_proto->local_id : peer_proto->remote_id;
+    peer_info->capability = 0; // TODO
+    peer_info->extra_info = NULL; // TODO
+    peer_info->peer_type =
+            peer_proto->is_internal ? IBGP_SESSION : EBGP_SESSION;
+
+    if(ipa_is_ip4(peer_proto->local_ip)) {
+        peer_info->addr.af = AF_INET;
+        h_ipv4 = ipa_to_u32(local ? peer_proto->local_ip : peer_proto->remote_ip);
+        peer_info->addr.addr.in.s_addr = htonl(h_ipv4);
+    } else {
+        peer_info->addr.af = AF_INET6;
+        memset(addr_str, 0, sizeof(char) * 48);
+        ip6 = ip6_hton(local ? peer_proto->local_ip : peer_proto->remote_ip);
+        ip6_ntop(ip6, addr_str);
+        inet_pton(AF_INET6, addr_str, &peer_info->addr.addr.in6);
+    }
+    peer_info->local_bgp_session = NULL;
+}
+
+
+struct ubpf_peer_info *get_peer_info(context_t *ctx) {
+    struct bgp_proto *bgp_info = NULL;
+    struct bgp_proto *local_bgp = NULL;
+    struct ubpf_peer_info *peer_info;
+    struct ubpf_peer_info *local_info;
+
+    bgp_info = get_arg_from_type(ctx, BGP_INFO);
+    if (!bgp_info) {
+        fprintf(stderr, "NON BGP_INFO\n");
+        return NULL;
+    }
+
+    peer_info = ctx_malloc(ctx, sizeof(*peer_info));
+    local_info = ctx_malloc(ctx, sizeof(*local_bgp));
+    if (!peer_info || !local_info) {
+        return NULL;
+    }
+
+    fill_bgp_info(peer_info, bgp_info, 0);
+    fill_bgp_info(local_info, bgp_info, 1);
+
+    peer_info->local_bgp_session = local_info;
+
+    return peer_info;
+}
+
+struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
+    ea_list *attr_list;
+    eattr *attr;
+    struct path_attribute *plugin_attr;
+    uint8_t *data;
+
+    attr_list = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    if (!attr_list) return NULL;
+    attr = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, code));
+    if (!attr) return NULL;
+
+    plugin_attr = ctx_malloc(ctx, sizeof(*plugin_attr));
+    if (!plugin_attr) return NULL;
+
+    plugin_attr->code = code;
+    plugin_attr->flags = attr->flags;
+    if (is_u32_attr(code)) {
+        data = ctx_malloc(ctx, sizeof(uint32_t));
+        if (!data) return NULL;
+        memcpy(data, &attr->u.data, 4);
+        plugin_attr->len = 4;
+    } else {
+        data = ctx_malloc(ctx, attr->u.ptr->length);
+        if (!data) return NULL;
+        memcpy(data, attr->u.ptr->data, attr->u.ptr->length);
+        plugin_attr->len = attr->u.ptr->length;
+    }
+    plugin_attr->data = data;
+    return plugin_attr;
+}

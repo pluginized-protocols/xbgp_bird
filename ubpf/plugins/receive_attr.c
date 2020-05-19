@@ -16,7 +16,19 @@ static __always_inline int32_t decode(uint32_t number) {
 
 
 static __always_inline int decode_attr(uint8_t code, uint16_t len, uint32_t flags, const uint8_t *data) {
+
+    struct ubpf_peer_info *pinfo;
+
     switch (code) {
+        case PREFIX_ORIGINATOR:
+            pinfo = get_peer_info();
+            if (!pinfo) {
+                ebpf_print("Unable to get peer info !\n");
+                return -1;
+            }
+
+            if (pinfo->peer_type == EBGP_SESSION) return -1;
+            /* fallthrough */
         case BA_GEO_TAG: {
             if (len != 8) return -1; // malformed attribute
 
@@ -37,7 +49,7 @@ static __always_inline int decode_attr(uint8_t code, uint16_t len, uint32_t flag
             geo_tag[0] = decode(raw_latitude);
             geo_tag[1] = decode(raw_longitude);
 
-            return add_attr(BA_GEO_TAG, flags, len, (uint8_t *) attr_data) == -1 ? -1 : 0;
+            return add_attr(code, flags, len, (uint8_t *) attr_data) == -1 ? -1 : 0;
         }
         default:
             return -1;

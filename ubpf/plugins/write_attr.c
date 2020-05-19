@@ -10,9 +10,22 @@ static __always_inline uint32_t encode_number(int32_t number) {
     return ((uint32_t)(-number)) | (1u << 31u);
 }
 
+static __always_inline uint64_t encode_coord(int32_t coord[2]) {
+
+    uint64_t _buf;
+    uint8_t *buf = (uint8_t *) &_buf;
+
+    *((uint32_t *) buf) = htonl(encode_number(coord[0]));
+    *((uint32_t *) (buf+4)) = htonl(encode_number(coord[1]));
+
+    return _buf;
+
+}
+
 static __always_inline int encode_attr(uint8_t code, const uint8_t *buf_in, uint8_t *buf_out) {
 
     int count = 0;
+    struct ubpf_peer_info *pinfo;
 
     switch (code) {
         case BA_GEO_TAG: {
@@ -30,6 +43,19 @@ static __always_inline int encode_attr(uint8_t code, const uint8_t *buf_in, uint
             count += 4;
             break;
         }
+        case PREFIX_ORIGINATOR:
+            // this attribute must not encoded through an eBGP session
+            // But it must be encoded for iBGP sessions
+            pinfo = get_peer_info();
+            if (!pinfo) {
+                ebpf_print("Unable to get peer info!\n");
+                return -1;
+            }
+
+            if (pinfo->peer_type == EBGP_SESSION) return -1; // don't export the attribute
+            *((uint64_t *)buf_out) = encode_coord(buf_in);
+            return 8;
+
         default:
             return -1;
     }

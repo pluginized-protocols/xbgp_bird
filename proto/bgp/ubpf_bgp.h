@@ -14,6 +14,8 @@ enum ubpf_plugins {
     BGP_MED_DECISION = 1, // decision process MED insertion point
     BGP_DECODE_ATTR,
     BGP_ENCODE_ATTR,
+    BGP_PRE_INBOUND_FILTER,
+    BGP_PRE_OUTBOUND_FILTER,
 };
 
 enum type {
@@ -26,7 +28,20 @@ enum type {
     PARSE_STATE,
     WRITE_STATE,
     BUFFER_ARRAY,
+    BGP_INFO,
+    HOST_LINPOOL,
 };
+
+static inline int ret_val_filter(uint64_t a) {
+    switch (a) {
+        case PLUGIN_FILTER_REJECT:
+        case PLUGIN_FILTER_ACCEPT:
+            return 1;
+        case PLUGIN_FILTER_UNK:
+        default:
+            return 0;
+    }
+}
 
 static inline int ret_val_check_decode(uint64_t a) {
     return a == EXIT_FAILURE ? 0 : 1;
@@ -34,7 +49,7 @@ static inline int ret_val_check_decode(uint64_t a) {
 
 static inline int ret_val_check_encode_attr(uint64_t val) {
     if (val > 4096) return 0; // RFC 4271 says 4KB max TODO CHECK
-    if (val == 0) return 0;
+    if (val == 0) return 1;
 
     return 1;
 }
@@ -54,8 +69,14 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
 
 struct path_attribute *get_attr(context_t *ctx);
 
+int set_attr(context_t *ctx, struct path_attribute *attr);
+
 int write_to_buffer(context_t *ctx, uint8_t *buf, size_t len);
 
 struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, int args_rte);
+
+struct ubpf_peer_info *get_peer_info(context_t *ctx);
+
+struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code);
 
 #endif //PLUGINIZED_BIRD_UBPF_BGP_H

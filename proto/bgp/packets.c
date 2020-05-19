@@ -11,6 +11,9 @@
 #undef LOCAL_DEBUG
 
 #include <stdlib.h>
+#include <netdb.h>
+#include <public.h>
+#include <stdio.h>
 
 #include "nest/bird.h"
 #include "nest/iface.h"
@@ -26,6 +29,7 @@
 #include "nest/cli.h"
 
 #include "bgp.h"
+#include "ubpf_bgp.h"
 
 
 #define BGP_RR_REQUEST		0
@@ -1308,7 +1312,24 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
     return;
   }
 
-  /* Prepare cached route attributes */
+  bpf_args_t args[] = {
+
+            {.arg = s->pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
+            {.arg = a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+            {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_INFO},
+  };
+
+  CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, sizeof(args) / sizeof(args[0]), ret_val_filter, {
+      // ON ERR
+      // no filters made a decision
+  }, {
+      if (VM_RETURN_VALUE == PLUGIN_FILTER_REJECT) {
+          return;
+      }
+      // ON SUCCESS
+  })
+
+    /* Prepare cached route attributes */
   if (s->cached_rta == NULL)
   {
     a0->src = s->last_src;
@@ -1325,6 +1346,7 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
   e->pflags = 0;
   e->u.bgp.suppressed = 0;
   e->u.bgp.stale = -1;
+
   rte_update3(&s->channel->c, n, e, s->last_src);
 }
 
