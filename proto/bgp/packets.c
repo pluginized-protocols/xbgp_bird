@@ -1316,7 +1316,8 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
 
             {.arg = s->pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
             {.arg = a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
-            {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_INFO},
+            {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+            {.arg = n, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
   };
 
   CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, sizeof(args) / sizeof(args[0]), ret_val_filter, {

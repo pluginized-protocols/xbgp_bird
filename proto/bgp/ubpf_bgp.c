@@ -12,6 +12,7 @@
 #include "lib/timer.h"
 #include "nest/protocol.h"
 #include "bgp.h"
+#include "prefix.h"
 
 static inline int is_u32_attr(word id) {
 
@@ -41,27 +42,27 @@ static inline int is_u32_attr(word id) {
 
 }
 
-static eattr *eattr_append(struct linpool *pool, ea_list *e, int id) {
+static eattr *eattr_append(struct linpool *pool, ea_list *e, int id UNUSED) {
 
-    ea_list *a;
-
-    word code = EA_CODE(PROTOCOL_BGP,id);
-
-    while (e) {
-        if (e->attrs->id >  code) break;
-        a = e;
+    while (e->next != NULL) {
         e = e->next;
     }
 
     ea_list *new = lp_alloc(pool, sizeof(ea_list) + sizeof(eattr));
+
+    if (!new) {
+        fprintf(stderr, "Unable to allocate new attribute\n");
+        return NULL;
+    }
+
     eattr *e_new = &new->attrs[0];
 
     new->flags = EALF_SORTED;
     new->count = 1;
     new->next = NULL;
-    a->next = new;
+    e->next = new;
 
-    new->next = e;
+    new->next = NULL;
 
     return e_new;
 }
@@ -93,7 +94,7 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
     attr_path->code = EA_ID(oiseau->id);
     attr_path->flags = oiseau->flags;
 
-    attr_len = (is_u32 = is_u32_attr(attr_path->code)) ? sizeof(uint32_t) :
+    attr_len = (is_u32 = (oiseau->type & EAF_EMBEDDED)) ? sizeof(uint32_t) :
                oiseau->u.ptr->length;
 
     attr_path->data = ctx_malloc(ctx, attr_len);
@@ -148,6 +149,8 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
         if (!pool) return -1;
 
         attr_stored = eattr_append(pool, attr_list, attr->code);
+        if (!attr_stored) return -1;
+
         attr_stored->id = EA_CODE(PROTOCOL_BGP, attr->code);
         attr_stored->flags = attr->flags;
         attr_stored->flags |= 1u; // pluginized attribute.
@@ -244,8 +247,7 @@ static void fill_bgp_info(struct ubpf_peer_info *peer_info, struct bgp_proto *pe
 
     peer_info->as = local ? peer_proto->public_as : peer_proto->remote_as;
     peer_info->router_id = local ? peer_proto->local_id : peer_proto->remote_id;
-    peer_info->capability = 0; // TODO
-    peer_info->extra_info = NULL; // TODO
+    peer_info->capability = 0; // TODO HERE ?
     peer_info->peer_type =
             peer_proto->is_internal ? IBGP_SESSION : EBGP_SESSION;
 
@@ -264,15 +266,15 @@ static void fill_bgp_info(struct ubpf_peer_info *peer_info, struct bgp_proto *pe
 }
 
 
-struct ubpf_peer_info *get_peer_info(context_t *ctx) {
+static struct ubpf_peer_info *get_peer_info_(context_t *ctx, int which_peer) {
     struct bgp_proto *bgp_info = NULL;
     struct bgp_proto *local_bgp = NULL;
     struct ubpf_peer_info *peer_info;
     struct ubpf_peer_info *local_info;
 
-    bgp_info = get_arg_from_type(ctx, BGP_INFO);
+    bgp_info = get_arg_from_type(ctx, which_peer);
     if (!bgp_info) {
-        fprintf(stderr, "NON BGP_INFO\n");
+        fprintf(stderr, "NO BGP_INFO\n");
         return NULL;
     }
 
@@ -288,6 +290,80 @@ struct ubpf_peer_info *get_peer_info(context_t *ctx) {
     peer_info->local_bgp_session = local_info;
 
     return peer_info;
+}
+
+struct ubpf_peer_info *get_src_peer_info(context_t *ctx) {
+    return get_peer_info_(ctx, BGP_SRC_INFO);
+}
+
+struct ubpf_peer_info *get_peer_info(context_t *ctx) {
+    return get_peer_info_(ctx, BGP_TO_INFO);
+}
+
+static int set_peer_info_(context_t *ctx, int key, void *value, int len, int type) {
+
+    struct bgp_proto *bgp_info = NULL;
+    mem_pool *mp;
+
+    bgp_info = get_arg_from_type(ctx, type);
+    if (!bgp_info) {
+        fprintf(stderr, "NO BGP_INFO\n");
+        return -1;
+    }
+
+    mp = bgp_info->mempool;
+    if (!mp){
+        fprintf(stderr, "Error, mempool not init");
+        return -1;
+    }
+
+    if (add_single_mempool(mp, key, NULL, len, value) != 0) return -1;
+
+    return 0;
+}
+
+int set_peer_info_src(context_t *ctx, int key, void *value, int len) {
+    return set_peer_info_(ctx, key, value, len, BGP_SRC_INFO);
+}
+
+int set_peer_info(context_t *ctx, int key, void *value, int len) {
+    return set_peer_info_(ctx, key, value, len, BGP_TO_INFO);
+}
+
+static void *get_peer_info_mp_(context_t *ctx, int key, int which_peer) {
+
+    struct bgp_proto *bgp_info = NULL;
+    struct mempool_data data;
+    mem_pool *mp;
+    void *plugin_data;
+
+    bgp_info = get_arg_from_type(ctx, which_peer);
+    if (!bgp_info) {
+        fprintf(stderr, "NO BGP_INFO\n");
+        return NULL;
+    }
+
+    mp = bgp_info->mempool;
+    if (!mp){
+        fprintf(stderr, "Error, mempool not init");
+        return NULL;
+    }
+
+    if (get_mempool_data(mp, key, &data) != 0) return NULL;
+
+    plugin_data = ctx_malloc(ctx, data.length);
+    if (!plugin_data) return NULL;
+
+    memcpy(plugin_data, data.data, data.length);
+    return plugin_data;
+}
+
+void *get_peer_info_src_extra(context_t *ctx, int key) {
+    return get_peer_info_mp_(ctx, key, BGP_SRC_INFO);
+}
+
+void *get_peer_info_extra(context_t *ctx, int key) {
+    return get_peer_info_mp_(ctx, key, BGP_TO_INFO);
 }
 
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
@@ -319,4 +395,52 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
     }
     plugin_attr->data = data;
     return plugin_attr;
+}
+
+
+union prefix *get_prefix(context_t *ctx) {
+
+    net_addr *n = get_arg_from_type(ctx, PREFIX);
+    net_addr_ip4 *nip4;
+    net_addr_ip6 *nip6;
+
+    union prefix *prfx;
+    struct in6_addr in6;
+
+    if (!n) return NULL;
+
+    prfx = ctx_malloc(ctx, sizeof(*prfx));
+    if (!prfx) return NULL;
+
+    if (n->type == NET_IP4) {
+        nip4 = (net_addr_ip4 *) n;
+
+        prfx->family = AF_INET;
+
+        prfx->ip4_pfx.family = AF_INET;
+        prfx->ip4_pfx.prefix_len = n->pxlen;
+        prfx->ip4_pfx.p.s_addr = htonl(nip4->prefix);
+
+    } else if (n->type == NET_IP6) {
+
+        prfx->family = AF_INET6;
+
+        nip6 = (net_addr_ip6 *) n;
+        memset(&in6, 0, sizeof(in6));
+
+        in6.s6_addr32[0] = htonl(nip6->prefix.addr[0]);
+        in6.s6_addr32[1] = htonl(nip6->prefix.addr[1]);
+        in6.s6_addr32[2] = htonl(nip6->prefix.addr[2]);
+        in6.s6_addr32[3] = htonl(nip6->prefix.addr[3]);
+
+
+        prfx->ip6_pfx.family = AF_INET6;
+        prfx->ip6_pfx.prefix_len = n->pxlen;
+        prfx->ip6_pfx.p = in6;
+
+    } else {
+        return NULL;
+    }
+
+    return prfx;
 }

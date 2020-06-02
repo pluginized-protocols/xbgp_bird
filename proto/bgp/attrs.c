@@ -1190,25 +1190,24 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
 
   uint code = EA_ID(a->id);
 
-  if (bgp_attr_known(code))
-    return bgp_attr_table[code].encode(s, a, buf, size);
-  else {
+  bpf_args_t args[] = {
+      [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
+      [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
+      [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
+      [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE},
+      [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+  };
 
-      bpf_args_t args[] = {
-              [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
-              [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
-              [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
-              [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE},
-              [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_INFO},
-      };
-
-      CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 5, ret_val_check_encode_attr, {
-          fprintf(stderr, "Unsuccessful encoding\n");
+  CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 5, ret_val_check_encode_attr, {
+      // Unsuccessful encoding
+      if (bgp_attr_known(code)) {
+          return bgp_attr_table[code].encode(s, a, buf, size);
+      } else  {
           return bgp_encode_raw(s, a, buf, size);
-      }, {
-          return VM_RETURN_VALUE; // number of bytes written
-      })
-  }
+      }
+  }, {
+      return VM_RETURN_VALUE; // number of bytes written
+  })
 }
 
 /**
@@ -1401,13 +1400,13 @@ bgp_decode_attrs(struct bgp_parse_state *s, byte *data, uint len)
   if ((p->public_as != p->local_as) && bgp_as_path_loopy(p, attrs, p->public_as))
     goto withdraw;
 
-  /* Reject routes with our Router ID in ORIGINATOR_ID attribute; RFC 4456 8 */
-  if (p->is_internal && bgp_originator_id_loopy(p, attrs))
-    goto withdraw;
-
-  /* Reject routes with our Cluster ID in CLUSTER_LIST attribute; RFC 4456 8 */
-  if (p->rr_client && bgp_cluster_list_loopy(p, attrs))
-    goto withdraw;
+  ///* Reject routes with our Router ID in ORIGINATOR_ID attribute; RFC 4456 8 */ // -> HANDLED BY PLUGINS
+  //if (p->is_internal && bgp_originator_id_loopy(p, attrs))
+  //  goto withdraw;
+  //
+  ///* Reject routes with our Cluster ID in CLUSTER_LIST attribute; RFC 4456 8 */
+  //if (p->rr_client && bgp_cluster_list_loopy(p, attrs))
+  //  goto withdraw;
 
   /* If there is no local preference, define one */
   if (!BIT32_TEST(s->attrs_seen, BA_LOCAL_PREF))
@@ -1679,9 +1678,10 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
 
   bpf_args_t args[] = {
           {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
-          {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_INFO},
+          {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+          {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
           {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
-          {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
+          {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
   };
 
   CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, sizeof(args)/sizeof(args[0]), ret_val_filter, {
@@ -1699,18 +1699,20 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
       }
   })
 
-  /* IBGP route reflection, RFC 4456 */
-  if (p->is_internal && src->is_internal && (p->local_as == src->local_as))
-  {
-    /* Rejected unless configured as route reflector */
-    if (!p->rr_client && !src->rr_client)
-      return -1;
 
-    /* Generally, this should be handled when path is received, but we check it
-       also here as rr_cluster_id may be undefined or different in src. */
-    if (p->rr_cluster_id && bgp_cluster_list_loopy(p, e->attrs->eattrs))
-      return -1;
-  }
+  /* IBGP route reflection, RFC 4456 */ // IS HANDLED BY PLUGINS
+  //if (p->is_internal && src->is_internal && (p->local_as == src->local_as))
+  //{
+  //  /* Rejected unless configured as route reflector */
+  //  if (!p->rr_client && !src->rr_client)
+  //    return -1;
+  //
+  //  /* Generally, this should be handled when path is received, but we check it
+  //     also here as rr_cluster_id may be undefined or different in src. */
+  //  if (p->rr_cluster_id && bgp_cluster_list_loopy(p, e->attrs->eattrs))
+  //    return -1;
+  //}
+
 
   /* Handle well-known communities, RFC 1997 */
   struct eattr *c;
@@ -1804,8 +1806,8 @@ bgp_update_attrs(struct bgp_proto *p, struct bgp_channel *c, rte *e, ea_list *at
     bgp_set_attr_ptr(&attrs, pool, BA_AIGP, 0, ad);
   }
 
-  /* IBGP route reflection, RFC 4456 */
-  if (src && src->is_internal && p->is_internal && (src->local_as == p->local_as))
+  /* IBGP route reflection, RFC 4456 */ // -> HANDLED BY PLUGINS
+  if (0/*src && src->is_internal && p->is_internal && (src->local_as == p->local_as)*/)
   {
     /* ORIGINATOR_ID attribute - attach if not already set */
     if (! bgp_find_attr(attrs0, BA_ORIGINATOR_ID))

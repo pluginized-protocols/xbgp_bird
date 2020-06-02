@@ -53,6 +53,11 @@ static proto_ext_fun_t funcs[] = {
         {.fn = write_to_buffer, .name="write_to_buffer"},
         {.fn = get_attr_by_code_from_rte, .name = "get_attr_by_code_from_rte"},
         {.fn = get_peer_info, .name = "get_peer_info"},
+        {.fn = get_src_peer_info, .name = "get_src_peer_info"},
+        {.fn = set_peer_info_src, .name = "set_peer_info_src"},
+        {.fn = set_peer_info, .name = "set_peer_info"},
+        {.fn = get_peer_info_src_extra, .name = "get_peer_info_src_extra"},
+        {.fn = get_peer_info_extra, .name = "get_peer_info_src_extra"},
         {.fn = get_attr_from_code, .name = "get_attr_from_code"},
         proto_ext_func_null,
 };

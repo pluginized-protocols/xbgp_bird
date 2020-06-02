@@ -1,0 +1,75 @@
+{
+  "jit_all" : false,
+  "plugins" : {
+    "bgp_pre_inbound_filter": {
+      "extra_mem": 4096,
+      "shared_mem": 0,
+      "replace": {
+        "0" : {
+          "path": "import_route_rr.o"
+        }
+      }
+    },
+    "bgp_pre_outbound_filter": {
+      "extra_mem": 4096,
+      "shared_mem": 0,
+      "replace": {
+        "0": {
+          "path": "export_route_rr.o"
+        }
+      }
+    },
+    "bgp_encode_attr": {
+      "extra_mem": 4096,
+      "shared_mem": 0,
+      "replace": {
+        "0": {
+          "path": "encode_cluster_list.o"
+        },
+        "10": {
+          "path": "encode_originator_id.o"
+        }
+      }
+    },
+    "bgp_decode_attr": {
+      "extra_mem": 4096,
+      "shared_mem": 0,
+      "replace" : {
+        "0" : {
+          "path": "decode_cluster_list.o"
+        },
+        "10" : {
+          "path": "decode_originator.o"
+        }
+      }
+    }
+  },
+  "extra_info": {
+    "rr_clients": {
+      "type_arg" : "list",
+      "arg": [
+        {"type_arg": "ipv4", "arg": "192.168.56.3"},
+        {"type_arg":  "ipv4", "arg":  "192.168.56.4"}
+      ]
+    },
+    "allowed_prefixes": {
+      "type_arg": "list",
+      "arg": [
+        {
+          "type_arg": "list",
+          "arg": [
+            {"type_arg":  "int", "arg":  "65002"},
+            {"type_arg":  "ipv4_prefix", "arg":  "192.168.56.0/24"}
+          ]
+        },
+        {
+          "type_arg": "list",
+          "arg": [
+            {"type_arg":  "int", "arg":  "65003"},
+            {"type_arg":  "ipv4_prefix", "arg":  "192.168.55.0/24"}
+          ]
+        }
+      ]
+    }
+  }
+}

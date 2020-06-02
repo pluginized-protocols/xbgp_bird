@@ -57,4 +57,18 @@ struct path_attribute *get_attr_from_code(uint8_t code);
  */
 int announce_nrli(struct ubpf_prefix *pfx);
 
+extern struct ubpf_peer_info *get_peer_info();
+
+extern struct ubpf_peer_info *get_src_peer_info();
+
+extern int set_peer_info_src(int key, void *value, int len);
+
+extern int set_peer_info(int key, void *value, int len);
+
+extern void *get_peer_info_src_extra(int key);
+
+extern void *get_peer_info_extra(int key);
+
+extern union prefix *get_prefix();
+
 #endif //PLUGINIZED_BIRD_UBPF_API_H

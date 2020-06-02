@@ -28,8 +28,10 @@ enum type {
     PARSE_STATE,
     WRITE_STATE,
     BUFFER_ARRAY,
-    BGP_INFO,
+    BGP_SRC_INFO,
+    BGP_TO_INFO,
     HOST_LINPOOL,
+    PREFIX,
 };
 
 static inline int ret_val_filter(uint64_t a) {
@@ -77,6 +79,18 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
 
 struct ubpf_peer_info *get_peer_info(context_t *ctx);
 
+struct ubpf_peer_info *get_src_peer_info(context_t *ctx);
+
+void *get_peer_info_src_extra(context_t *ctx, int key);
+
+void *get_peer_info_extra(context_t *ctx, int key);
+
+int set_peer_info(context_t *ctx, int key, void *value, int len);
+
+int set_peer_info_src(context_t *ctx, int key, void *value, int len);
+
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code);
+
+union prefix *get_prefix(context_t *ctx);
 
 #endif //PLUGINIZED_BIRD_UBPF_BGP_H

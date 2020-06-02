@@ -19,6 +19,7 @@
 //#include "lib/lists.h"
 #include "lib/hash.h"
 #include "lib/socket.h"
+#include "ubpf_mempool_hdr.h"
 
 struct linpool;
 struct eattr;
@@ -324,6 +325,7 @@ struct bgp_proto {
   u8 last_error_class; 			/* Error class of last error */
   u32 last_error_code;			/* Error code of last error. BGP protocol errors
 					   are encoded as (bgp_err_code << 16 | bgp_err_subcode) */
+  mem_pool *mempool;  /* extra configuration inherited from plugins */
 };
 
 struct bgp_channel {
