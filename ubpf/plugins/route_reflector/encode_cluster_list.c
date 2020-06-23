@@ -13,11 +13,24 @@ uint64_t encode_cluster_list(bpf_full_args_t *args __attribute__((unused))) {
     uint16_t tot_len = 0;
     uint32_t *cluster_list;
     int i;
+    int nb_peer;
 
     struct path_attribute *attribute;
     attribute = get_attr();
 
     if (!attribute) return 0;
+
+    struct ubpf_peer_info *to_info;
+    to_info = get_peer_info(&nb_peer);
+
+    if (!to_info) {
+        ebpf_print("Can't get src and peer info\n");
+        return 0;
+    }
+
+    if (to_info->peer_type != IBGP_SESSION) {
+        next();
+    }
 
     if (attribute->code != CLUSTER_LIST) next();
 

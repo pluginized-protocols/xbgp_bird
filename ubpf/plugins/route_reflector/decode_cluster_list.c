@@ -9,6 +9,7 @@
 uint64_t decode_cluster_list(bpf_full_args_t *args UNUSED) {
 
     int i;
+    struct ubpf_peer_info *src_info;
 
     uint8_t *code;
     uint16_t *len;
@@ -23,9 +24,13 @@ uint64_t decode_cluster_list(bpf_full_args_t *args UNUSED) {
     data = bpf_get_args(2, args);
     len = bpf_get_args(3, args);
 
-    if (!code || !len || !flags || !data) {
+    src_info = get_src_peer_info();
+
+    if (!src_info || !code || !len || !flags || !data) {
         return EXIT_FAILURE;
     }
+
+    if (src_info->peer_type != IBGP_SESSION) next(); // don't parse CLUSTER_LIST if originated from eBGP session
 
     if (*code != CLUSTER_LIST) next();
 

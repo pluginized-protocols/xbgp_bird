@@ -2,7 +2,7 @@
 // Created by thomas on 20/02/20.
 //
 
-#include "../public_bpf.h"
+#include "public_bpf.h"
 #include "ubpf_api.h"
 
 typedef struct geo_tags {

@@ -1,5 +1,5 @@
 {
-  "jit_all" : false,
+  "jit_all" : true,
   "plugins" : {
     "bgp_pre_inbound_filter": {
       "extra_mem": 4096,
@@ -42,34 +42,6 @@
           "path": "decode_originator.o"
         }
       }
-    }
-  },
-  "extra_info": {
-    "rr_clients": {
-      "type_arg" : "list",
-      "arg": [
-        {"type_arg": "ipv4", "arg": "192.168.56.3"},
-        {"type_arg":  "ipv4", "arg":  "192.168.56.4"}
-      ]
-    },
-    "allowed_prefixes": {
-      "type_arg": "list",
-      "arg": [
-        {
-          "type_arg": "list",
-          "arg": [
-            {"type_arg":  "int", "arg":  "65002"},
-            {"type_arg":  "ipv4_prefix", "arg":  "192.168.56.0/24"}
-          ]
-        },
-        {
-          "type_arg": "list",
-          "arg": [
-            {"type_arg":  "int", "arg":  "65003"},
-            {"type_arg":  "ipv4_prefix", "arg":  "192.168.55.0/24"}
-          ]
-        }
-      ]
     }
   }
 }

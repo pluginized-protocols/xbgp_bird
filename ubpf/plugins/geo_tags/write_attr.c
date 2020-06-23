@@ -2,7 +2,7 @@
 // Created by thomas on 20/02/20.
 //
 
-#include "../public_bpf.h"
+#include "public_bpf.h"
 #include "ubpf_api.h"
 
 static __always_inline uint32_t encode_number(int32_t number) {
@@ -25,6 +25,7 @@ static __always_inline uint64_t encode_coord(int32_t coord[2]) {
 static __always_inline int encode_attr(uint8_t code, const uint8_t *buf_in, uint8_t *buf_out) {
 
     int count = 0;
+    int nb_peers;
     struct ubpf_peer_info *pinfo;
 
     switch (code) {
@@ -46,7 +47,7 @@ static __always_inline int encode_attr(uint8_t code, const uint8_t *buf_in, uint
         case PREFIX_ORIGINATOR:
             // this attribute must not encoded through an eBGP session
             // But it must be encoded for iBGP sessions
-            pinfo = get_peer_info();
+            pinfo = get_peer_info(&nb_peers);
             if (!pinfo) {
                 ebpf_print("Unable to get peer info!\n");
                 return -1;

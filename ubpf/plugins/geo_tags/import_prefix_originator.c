@@ -10,9 +10,9 @@
 uint64_t add_prefix_originator(bpf_full_args_t *args UNUSED) {
 
     uint64_t attr;
-
+    int nb_peers;
     struct path_attribute originating_prefix;
-    struct ubpf_peer_info *peer = get_peer_info();
+    struct ubpf_peer_info *peer = get_peer_info(&nb_peers);
 
     if (peer->peer_type != EBGP_SESSION) {
         ebpf_print("Not an eBGP session\n");

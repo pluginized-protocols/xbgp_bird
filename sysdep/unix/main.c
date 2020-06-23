@@ -59,6 +59,7 @@ static proto_ext_fun_t funcs[] = {
         {.fn = get_peer_info_src_extra, .name = "get_peer_info_src_extra"},
         {.fn = get_peer_info_extra, .name = "get_peer_info_src_extra"},
         {.fn = get_attr_from_code, .name = "get_attr_from_code"},
+        {.fn = get_prefix, .name = "get_prefix"},
         proto_ext_func_null,
 };
 
@@ -70,6 +71,10 @@ static plugin_info_t plugins[] = {
         {.plugin_id = BGP_PRE_OUTBOUND_FILTER, .plugin_str="bgp_pre_outbound_filter"},
         plugin_info_null
 };
+
+static const char *plugin_manifest = NULL;
+static const char *plugin_extra_conf = NULL;
+static const char *plugin_location_dir = NULL;
 
 /*
  *	Debugging
@@ -698,7 +703,7 @@ signal_init(void)
  *	Parsing of command-line arguments
  */
 
-static char *opt_list = "bc:dD:ps:P:u:g:flRh";
+static char *opt_list = "bc:dD:ps:P:u:g:flRhx:y:z:";
 static int parse_and_exit;
 char *bird_name;
 static char *use_user;
@@ -720,7 +725,7 @@ display_help(void)
     "\n"
     "Options: \n"
     "  -c <config-file>     Use given configuration file instead of\n"
-    "                       "  PATH_CONFIG_FILE "\n"
+    "                       "   PATH_CONFIG_FILE "\n"
     "  -d                   Enable debug messages and run bird in foreground\n"
     "  -D <debug-file>      Log debug messages to given file instead of stderr\n"
     "  -f                   Run bird in foreground\n"
@@ -733,6 +738,9 @@ display_help(void)
     "  -R                   Apply graceful restart recovery after start\n"
     "  -s <control-socket>  Use given filename for a control socket\n"
     "  -u <user>            Drop privileges and use given user ID\n"
+    "  -x <extra-conf>      Path to the extra conf used by plugins\n"
+    "  -y <plugin-path>     Path to find the eBPF bytecode\n"
+    "  -z <plugin-manifest> Path to the manifest containing plugins to load\n"
     "  --version            Display version of BIRD\n");
 
   exit(0);
@@ -865,6 +873,15 @@ parse_args(int argc, char **argv)
       case 'h':
 	display_help();
 	break;
+          case 'x':
+              plugin_extra_conf = optarg;
+              break;
+          case 'y':
+              plugin_location_dir = optarg;
+              break;
+          case 'z':
+              plugin_manifest = optarg;
+              break;
       default:
 	fputc('\n', stderr);
 	display_usage();
@@ -945,35 +962,60 @@ main(int argc, char **argv)
     }
 
   /* init ubpf_manager */
-  char copied_conf_file[PATH_MAX];
-  memset(copied_conf_file, 0, sizeof(char) * PATH_MAX);
-  strncpy(copied_conf_file, PATH_CONFIG_FILE, PATH_MAX-1);
+  const char *the_plugin_manifest;
+  const char *the_plugin_location_dir;
+  const char *the_conf_dir;
+  const char *the_plugin_extra_conf;
 
-  char *config_dir = dirname(copied_conf_file);
-  char *manifest_path = calloc(PATH_MAX, sizeof(char));
-  char *real_manifest_path = calloc(PATH_MAX, sizeof(char));
-  char *backup = real_manifest_path;
+  char copied_config_dir[PATH_MAX];
+  char real_config_name[PATH_MAX];
+  char manifest_path[PATH_MAX];
+  char plugin_loc_dir[PATH_MAX];
+  char plugin_extra_cnf[PATH_MAX];
 
-  if (!manifest_path) {
-      free(manifest_path);
-      free(real_manifest_path);
-      die("Memalloc failed");
+  memset(copied_config_dir, 0, sizeof(char) * PATH_MAX);
+  memset(real_config_name, 0, sizeof(char) * PATH_MAX);
+  memset(manifest_path, 0, sizeof(char) * PATH_MAX);
+  memset(plugin_loc_dir, 0, sizeof(char) * PATH_MAX);
+
+  strncpy(copied_config_dir, PATH_CONFIG_FILE, PATH_MAX);
+
+  realpath(copied_config_dir, real_config_name);
+  the_conf_dir = dirname(real_config_name);
+
+  if (plugin_manifest) {
+      the_plugin_manifest = plugin_manifest;
+  } else { // default
+      snprintf(manifest_path, PATH_MAX, "%s/manifest.json", the_conf_dir);
+      the_plugin_manifest = manifest_path;
   }
-  snprintf(manifest_path, PATH_MAX - 14, "%s/manifest.json", config_dir);
 
-  backup = realpath(manifest_path, real_manifest_path);
+   if (plugin_location_dir) {
+       the_plugin_location_dir = plugin_location_dir;
+   } else {
+       snprintf(manifest_path, PATH_MAX, "%s/plugins", the_conf_dir);
+       the_plugin_location_dir = plugin_loc_dir;
 
-  if (!backup) bug("Cannot resolve manifes path");
-  if (init_plugin_manager(funcs, config_dir, strnlen(config_dir, 2048),
+   }
+
+   if (plugin_extra_conf) {
+       the_plugin_extra_conf = plugin_extra_conf;
+   } else {
+       snprintf(plugin_extra_cnf, PATH_MAX, "%s/extra_conf.json", the_conf_dir);
+       the_plugin_extra_conf = plugin_extra_cnf;
+   }
+
+  if (init_plugin_manager(funcs, the_conf_dir, strnlen(the_conf_dir, 2048),
                           plugins, NULL, NULL, 0) != 0)
       die("Cannot init plugin manager");
 
-  if(load_plugin_from_json(real_manifest_path, config_dir, strnlen(config_dir, FILENAME_MAX)) != 0) {
+  if(load_plugin_from_json(the_plugin_manifest, the_plugin_location_dir, strnlen(the_plugin_location_dir, FILENAME_MAX)) != 0) {
       die("Unable to load plugins");
   }
 
-  free(manifest_path);
-  free(real_manifest_path);
+  if (extra_info_from_json(the_plugin_extra_conf, "conf") != 0){
+      fprintf(stderr,"Unable to load extra conf plugins");
+  }
   /* initialisation done */
 
   main_thread_init();

@@ -427,6 +427,7 @@ bgp_encode_as_path(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
     /* Prepare 16-bit AS_PATH (from 32-bit one) in a temporary buffer */
     byte *dst = alloca(len);
     len = as_path_32to16(dst, data, len);
+    len = as_path_32to16(dst, data, len);
     data = dst;
   }
 
@@ -1195,7 +1196,7 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
       [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
       [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
       [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE},
-      [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+      [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
   };
 
   CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 5, ret_val_check_encode_attr, {
@@ -1304,6 +1305,7 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
               [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = UNSIGNED_INT},
               [4] = {.arg = to, .len = sizeof(to), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
               [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
+              [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
       };
       CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, sizeof(args) / sizeof(args[0]), ret_val_check_decode, {
           if (!(flags & BAF_OPTIONAL))
@@ -1682,6 +1684,7 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
           {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
           {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
           {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
+          {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
   };
 
   CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, sizeof(args)/sizeof(args[0]), ret_val_filter, {

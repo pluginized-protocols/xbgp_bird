@@ -29,9 +29,9 @@ uint64_t import_route_rr(bpf_full_args_t *args UNUSED) {
         return PLUGIN_FILTER_REJECT;
     }
 
-    router_id = pinfo->router_id;
+    router_id = pinfo->local_bgp_session->router_id;
     if (pinfo->peer_type == EBGP_SESSION) next();
-    if (!originator || !cluster_list) next();
+    if (!originator || !cluster_list) next(); /// XXX: check this
 
     originator_id = *(uint32_t *) originator->data;
 

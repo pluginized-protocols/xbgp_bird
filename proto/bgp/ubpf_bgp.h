@@ -32,6 +32,10 @@ enum type {
     BGP_TO_INFO,
     HOST_LINPOOL,
     PREFIX,
+    RIB_ROUTE,
+    LOC_RIB_TABLE,
+    RIB_IN_TABLE,
+    RIB_OUT_TABLE,
 };
 
 static inline int ret_val_filter(uint64_t a) {
@@ -77,7 +81,7 @@ int write_to_buffer(context_t *ctx, uint8_t *buf, size_t len);
 
 struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, int args_rte);
 
-struct ubpf_peer_info *get_peer_info(context_t *ctx);
+struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers);
 
 struct ubpf_peer_info *get_src_peer_info(context_t *ctx);
 
@@ -91,6 +95,8 @@ int set_peer_info_src(context_t *ctx, int key, void *value, int len);
 
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code);
 
-union prefix *get_prefix(context_t *ctx);
+union ubpf_prefix *get_prefix(context_t *ctx);
+
+struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx);
 
 #endif //PLUGINIZED_BIRD_UBPF_BGP_H

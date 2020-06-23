@@ -12,7 +12,7 @@
 #include "lib/timer.h"
 #include "nest/protocol.h"
 #include "bgp.h"
-#include "prefix.h"
+#include "ubpf_prefix.h"
 
 static inline int is_u32_attr(word id) {
 
@@ -296,7 +296,11 @@ struct ubpf_peer_info *get_src_peer_info(context_t *ctx) {
     return get_peer_info_(ctx, BGP_SRC_INFO);
 }
 
-struct ubpf_peer_info *get_peer_info(context_t *ctx) {
+struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers){
+
+    if (!nb_peers) return NULL;
+    *nb_peers = 1;
+
     return get_peer_info_(ctx, BGP_TO_INFO);
 }
 
@@ -398,13 +402,13 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
 }
 
 
-union prefix *get_prefix(context_t *ctx) {
+union ubpf_prefix *get_prefix(context_t *ctx) {
 
     net_addr *n = get_arg_from_type(ctx, PREFIX);
     net_addr_ip4 *nip4;
     net_addr_ip6 *nip6;
 
-    union prefix *prfx;
+    union ubpf_prefix *prfx;
     struct in6_addr in6;
 
     if (!n) return NULL;
@@ -419,7 +423,7 @@ union prefix *get_prefix(context_t *ctx) {
 
         prfx->ip4_pfx.family = AF_INET;
         prfx->ip4_pfx.prefix_len = n->pxlen;
-        prfx->ip4_pfx.p.s_addr = htonl(nip4->prefix);
+        prfx->ip4_pfx.p.s_addr = htonl(ip4_to_u32(nip4->prefix));
 
     } else if (n->type == NET_IP6) {
 
@@ -443,4 +447,44 @@ union prefix *get_prefix(context_t *ctx) {
     }
 
     return prfx;
+}
+
+struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx) {
+
+    struct ubpf_nexthop *nexthop_info;
+
+    rte *rib_route = get_arg_from_type(ctx, RIB_ROUTE);
+    if (!rib_route) return NULL;
+
+    nexthop_info = ctx_malloc(ctx, sizeof (*nexthop_info));
+    if (!nexthop_info) return NULL;
+
+    nexthop_info->igp_metric = rib_route->attrs->igp_metric;
+    nexthop_info->route_type = rib_route->attrs->source;
+
+    return nexthop_info;
+}
+
+struct ubpf_rib_entry *get_rib_in_entry(context_t *ctx, uint8_t af_family, union ubpf_prefix *pfx) {
+
+    net_addr conv_pfx;
+    rtable *table_in = get_arg_from_type(ctx, RIB_IN_TABLE);
+
+    switch(pfx->family) {
+        case AF_INET:
+            net_fill_ip4(&conv_pfx, ip4_from_u32(ntohl(pfx->ip4_pfx.p.s_addr)), pfx->ip4_pfx.prefix_len);
+            break;
+        case AF_INET6:
+            //net_fill_ip6(&conv_pfx, ip)
+            break;
+        default:
+            return NULL;
+    }
+
+    fprintf(stderr, "No implemented yet %s\n", __func__ );
+    abort();
+    return NULL;
+
+    //net_route(table_in, )
+
 }

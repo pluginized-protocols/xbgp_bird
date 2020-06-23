@@ -12,6 +12,7 @@ uint64_t decode_originator(bpf_full_args_t *args UNUSED) {
     uint16_t *len;
     uint8_t *flags;
     uint8_t *data;
+    struct ubpf_peer_info *src_info;
 
     uint32_t originator_id;
 
@@ -20,9 +21,13 @@ uint64_t decode_originator(bpf_full_args_t *args UNUSED) {
     data = bpf_get_args(2, args);
     len = bpf_get_args(3, args);
 
+    src_info = get_src_peer_info();
+
     if (!code || !len || !flags || !data) {
         return EXIT_FAILURE;
     }
+
+    if (src_info->peer_type != IBGP_SESSION) next(); // don't parse ORIGINATOR_LIST if originated from eBGP session
 
     if (*code != ORIGINATOR_ID) next();
 

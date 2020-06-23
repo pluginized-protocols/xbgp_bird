@@ -21,7 +21,7 @@ static __always_inline int decode_attr(uint8_t code, uint16_t len, uint32_t flag
 
     switch (code) {
         case PREFIX_ORIGINATOR:
-            pinfo = get_peer_info();
+            pinfo = get_src_peer_info();
             if (!pinfo) {
                 ebpf_print("Unable to get peer info !\n");
                 return -1;

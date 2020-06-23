@@ -3,141 +3,146 @@
 //
 
 #include "../../public_bpf.h"
-#include "../../prefix.h"
+#include "../../ubpf_prefix.h"
 #include "ubpf_api.h"
+#include "common_security.h"
+#include "../byte_manip.h"
 
-#define AS_PATH_ATTR_CODE 2
+#define AS_PATH_SET		1	/* Types of path segments */
+#define AS_PATH_SEQUENCE	2
+#define AS_PATH_CONFED_SEQUENCE	3
+#define AS_PATH_CONFED_SET	4
+int __always_inline
+as_path_get_last(struct path_attribute *attr, uint32_t *orig_as)
+{
+    const uint8_t *pos = attr->data;
+    const uint8_t *end = pos + attr->len;
+    int found = 0;
+    uint32_t val = 0;
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
+    while (pos < end)
+    {
+        uint type = pos[0];
+        uint len  = pos[1];
+        pos += 2;
 
-#define numcmp(a, b)                                                           \
-    ({                                                                     \
-        typeof(a) _cmp_a = (a);                                        \
-        typeof(b) _cmp_b = (b);                                        \
-        (_cmp_a < _cmp_b) ? -1 : ((_cmp_a > _cmp_b) ? 1 : 0);          \
-    })
+        if (!len)
+            continue;
 
-int __always_inline prefixes_same(union prefix *pfx1, union prefix *pfx2) {
+        switch (type)
+        {
+            case AS_PATH_SET:
+            case AS_PATH_CONFED_SET:
+                found = 0;
+                break;
 
-    if (pfx1->family != pfx2->family) return 0;
+            case AS_PATH_SEQUENCE:
+            case AS_PATH_CONFED_SEQUENCE:
+                val = get_u32(pos + 4 * (len - 1));
+                found = 1;
+                break;
+            default:
+                return 0;
+        }
 
-    if (pfx1->family == AF_INET) {
-        if (pfx1->ip4_pfx.prefix_len != pfx2->ip4_pfx.prefix_len) return 0;
-        return pfx1->ip4_pfx.p.s_addr == pfx2->ip4_pfx.p.s_addr;
-
-    } else if (pfx1->family == AF_INET6) {
-        if (pfx1->ip6_pfx.prefix_len != pfx2->ip6_pfx.prefix_len) return 0;
-        return ebpf_memcmp(&pfx1->ip6_pfx.p, &pfx2->ip6_pfx.p, 16) == 0;
+        pos += 4 * len;
     }
 
-    return 0;
+    if (found)
+        *orig_as = val;
+    return found;
 }
 
-/*
- * returns  1 if pfx1 is more specific than pfx2
- *          0 pfx1 is the same as pfx2
- *         -1 pfx1 is more general than pfx2
- *         -2 unable to determine (family mismatch or longest common bits are lower than MIN(pfx1.len, pfx2.len))
- */
-int __always_inline cmp_prefix(union prefix *pfx1, union prefix *pfx2) {
 
-    int pos, bit;
-    int length;
-    uint8_t xor;
-    int longest_match;
-    uint8_t *p1, *p2;
-    int min_len, pfx1_len;
 
-    if (pfx1->family != pfx2->family) return -2;
+void *memset(void *s, int c, size_t n);
 
-    if (pfx1->family == AF_INET) {
-        length = 4;
-        p1 = (uint8_t *) &pfx1->ip4_pfx.p.s_addr;
-        p2 = (uint8_t *) &pfx2->ip4_pfx.p.s_addr;
+uint64_t prefix_validator(bpf_full_args_t *args UNUSED) {
 
-        min_len = MIN(pfx1->ip4_pfx.prefix_len, pfx2->ip4_pfx.prefix_len);
-        pfx1_len = pfx1->ip4_pfx.prefix_len;
-
-    } else if (pfx1->family == AF_INET6) {
-        length = 16;
-        p1 = pfx1->ip6_pfx.p.s6_addr;
-        p2 = pfx2->ip6_pfx.p.s6_addr;
-
-        min_len = MIN(pfx1->ip6_pfx.prefix_len, pfx2->ip6_pfx.prefix_len);
-        pfx1_len = pfx1->ip6_pfx.prefix_len;
-    } else {
-        return -2;
-    }
-
-    for (pos = 0; pos < length; pos++)
-        if (p1[pos] != p2[pos])
-            break;
-    if (pos == length)
-        return pos * 8;
-
-    xor = p1[pos] ^ p2[pos];
-    for (bit = 0; bit < 8; bit++)
-        if (xor & (1u << (7u - bit)))
-            break;
-
-    longest_match = pos * 8 + bit;
-
-    if (longest_match < min_len) return -2; // unk ?
-
-    return numcmp(pfx1_len, longest_match);
-}
-
-uint32_t __always_inline rightmost_asn(struct path_attribute *attr) {
-
-    uint32_t asn;
-
-    if (attr->code != AS_PATH_ATTR_CODE) return 0;
-
-    asn = *((uint32_t *) (&attr->data[(attr->len / 4) - 1]));
-
-    return asn;
-}
-
-uint64_t prefix_validator(bpf_full_args_t *args) {
     int i;
-    struct global_info info;
-    struct global_info current_roa, current_asn, current_prefix;
-    int cmp_info;
-    uint64_t current_as_number;
-    union prefix ipfx;
-    union prefix *pfx_to_validate;
+    int prefix_exists = 0;
+    struct global_info info, list_vrp, curr_vrp;
+    struct global_info current_len, current_max_len, current_originator_as;
+    uint64_t vrp_as, vrp_len, vrp_max_len;
+    union ubpf_prefix *pfx_to_validate;
+    uint16_t prefix_len_to_val;
     struct path_attribute *as_path;
+    uint32_t orig_as;
+
+    char str_ip[45];
+    memset(str_ip, 0, 45);
 
     as_path = get_attr_from_code(AS_PATH_ATTR_CODE);
     pfx_to_validate = get_prefix();
-    if (!as_path) return FAIL;
-
-    if (get_extra_info("allowed_prefixes", &info) != 0) next();
-
-    for (i = 0;; i++) {
-        if (get_extra_info_lst_idx(&info, i, &current_roa) != 0) break;
-
-        if (get_extra_info_lst_idx(&current_roa, 0, &current_asn) != 0) {
-            return FAIL;
-        } if (get_extra_info_lst_idx(&current_roa, 1, &current_prefix) != 0) {
-            return FAIL;
-        } if (get_extra_info_value(&current_asn, &current_as_number, sizeof(current_as_number)) != 0) {
-            return FAIL;
-        } if (get_extra_info_value(&current_prefix, &ipfx, sizeof(ipfx)) != 0) {
-            return FAIL;
-        }
-        cmp_info = cmp_prefix(pfx_to_validate, &ipfx);
-
-        if (cmp_info == -2) continue;
-        else if (cmp_info > 0) return PLUGIN_FILTER_REJECT; // more specific than ROA
-
-        if (rightmost_asn(as_path) == current_as_number) {
-            if (cmp_info == 0) next();
-        } else if (cmp_info == 0) return PLUGIN_FILTER_REJECT;
+    if (!as_path || !pfx_to_validate) {
+        ebpf_print("Unable to allocate memory\n");
+        return FAIL;
     }
 
-    // no ROA associated to this prefix --> unknown, move to next filter
-    next();
-    // shouldn't be reached
-    return PLUGIN_FILTER_REJECT;
+    prefix_len_to_val = pfx_to_validate->family == AF_INET ? pfx_to_validate->ip4_pfx.prefix_len
+                                                           : pfx_to_validate->ip6_pfx.prefix_len;
+
+    if (get_extra_info("allowed_prefixes", &info) != 0) {
+        ebpf_print("No extra info ?\n");
+        next();
+    }
+
+    if (ebpf_inet_ntop(pfx_to_validate, str_ip, 44) != 0) {
+        ebpf_print("Conversion ip to str error");
+        return FAIL;
+    }
+
+    if (get_extra_info_dict(&info, str_ip, &list_vrp) != 0) {
+        // We don't know...
+        next();
+    }
+
+    for (i = 0;; i++) {
+
+        if (get_extra_info_lst_idx(&list_vrp, i, &curr_vrp) != 0) {
+
+            if (prefix_exists) return PLUGIN_FILTER_REJECT;
+            else next();
+            //ebpf_print("Announce rejected\n");
+        }
+
+        if (get_extra_info_lst_idx(&curr_vrp, 0, &current_len) != 0) {
+            ebpf_print("FAIL current len VRP");
+            return FAIL;
+        }
+        if (get_extra_info_lst_idx(&curr_vrp, 1, &current_max_len) != 0) {
+            ebpf_print("FAIL current max len VRP");
+            return FAIL;
+        }
+        if (get_extra_info_lst_idx(&curr_vrp, 2, &current_originator_as) != 0) {
+            ebpf_print("FAIL current originator as VRP");
+            return FAIL;
+        }
+        if (get_extra_info_value(&current_len, &vrp_len, sizeof(vrp_len)) != 0) {
+            ebpf_print("FAIL cannot get vrp_len");
+            return FAIL;
+        }
+        if (get_extra_info_value(&current_max_len, &vrp_max_len, sizeof(vrp_max_len)) != 0) {
+            ebpf_print("FAIL cannot get vrp_max_len");
+            return FAIL;
+        }
+        if (get_extra_info_value(&current_originator_as, &vrp_as, sizeof(vrp_as)) != 0) {
+            ebpf_print("FAIL cannot get vrp_len");
+            return FAIL;
+        }
+
+        if (vrp_len <= prefix_len_to_val) { // covered
+            prefix_exists = 1;
+
+            if (!as_path_get_last(as_path, &orig_as)){
+                return PLUGIN_FILTER_REJECT;
+            }
+
+            if (prefix_len_to_val <= vrp_max_len) {
+                if (vrp_as == orig_as){
+                    next(); // valid prefix !
+                }
+            }
+        }
+    }
 }
