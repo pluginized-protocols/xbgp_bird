@@ -117,7 +117,7 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     if (!safe_args(args, 4, ATTRIBUTE_LIST)) return -1;
     if (!safe_args(args, 5, PARSE_STATE)) return -1;
 
-    ea_list **to = get_arg(args, 4, ea_list **);
+    ea_list *to = get_arg(args, 4, ea_list *);
     struct bgp_parse_state *s = get_arg(args, 5, struct bgp_parse_state *);
 
     // this function copy the memory pointed by
@@ -126,7 +126,7 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     flags |= 1u; // distinguish pluginized attribute from unknown one
     // flags will be reinitialized when exporting, see attr.c:bgp_export_attr
 
-    ea_set_attr_data(to, s->pool, EA_CODE(PROTOCOL_BGP, code), flags, EAF_TYPE_OPAQUE, decoded_attr, length);
+    ea_set_attr_data(&to, s->pool, EA_CODE(PROTOCOL_BGP, code), flags, EAF_TYPE_OPAQUE, decoded_attr, length);
     return 0;
 }
 
@@ -386,7 +386,7 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
 
     plugin_attr->code = code;
     plugin_attr->flags = attr->flags;
-    if (is_u32_attr(code)) {
+    if (attr->type & EAF_EMBEDDED) {
         data = ctx_malloc(ctx, sizeof(uint32_t));
         if (!data) return NULL;
         memcpy(data, &attr->u.data, 4);

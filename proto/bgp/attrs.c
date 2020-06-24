@@ -1107,8 +1107,9 @@ bgp_export_attr(struct bgp_export_state *s, eattr *a, ea_list *to)
 
   uint code = EA_ID(a->id);
 
-  if (bgp_attr_known(code))
-  {
+  if (a->flags & 1u) { // the attribute is handled by a plugin
+      a->flags &= 0xf0u;
+  } else if (bgp_attr_known(code)) {
     const struct bgp_attr_desc *desc = &bgp_attr_table[code];
 
     /* The flags might have been zero if the attr was added by filters */
@@ -1125,19 +1126,12 @@ bgp_export_attr(struct bgp_export_state *s, eattr *a, ea_list *to)
     /* Attribute might become undefined in hook */
     if ((a->type & EAF_TYPE_MASK) == EAF_TYPE_UNDEF)
       return;
-  }
-  else
-  {
-      if (a->flags & 1u) {
-          // pluginized attribute !
-          a->flags &= 0xf0u;
-      } else {
-          /* Don't re-export unknown non-transitive attributes */
-          if (!(a->flags & BAF_TRANSITIVE))
-              return;
+  } else {
+      /* Don't re-export unknown non-transitive attributes */
+      if (!(a->flags & BAF_TRANSITIVE))
+          return;
 
-          a->flags |= BAF_PARTIAL;
-      }
+      a->flags |= BAF_PARTIAL;
   }
 
   /* Append updated attribute */
@@ -1303,7 +1297,7 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
               [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = UNSIGNED_INT},
               [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = BYTE_ARRAY},
               [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = UNSIGNED_INT},
-              [4] = {.arg = to, .len = sizeof(to), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+              [4] = {.arg = *to, .len = sizeof(to), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
               [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
               [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
       };
@@ -1678,30 +1672,39 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
   if (src == NULL)
     return 0;
 
-  bpf_args_t args[] = {
-          {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
-          {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
-          {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
-          {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
-          {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
-          {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
-  };
+  if (!e->attrs->exp_processed) { // temporary fix !
+      bpf_args_t args[] = {
+              {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
+              {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+              {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
+              {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+              {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
+              {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
+      };
 
-  CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, sizeof(args)/sizeof(args[0]), ret_val_filter, {
-      // ON ERR
-  }, {
-      // ON SUCCESS
-      switch (VM_RETURN_VALUE) {
-          case PLUGIN_FILTER_REJECT:
-              return -1;
-          case PLUGIN_FILTER_ACCEPT:
-              return 0;
-          case PLUGIN_FILTER_UNK:
-          default:
-              break;
+      CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, sizeof(args)/sizeof(args[0]), ret_val_filter, {
+          // ON ERR
+      }, {
+          // ON SUCCESS
+          switch (VM_RETURN_VALUE) {
+              case PLUGIN_FILTER_REJECT:
+                  return -1;
+              case PLUGIN_FILTER_ACCEPT:
+                  return 0;
+              case PLUGIN_FILTER_UNK:
+                  default:
+                  break;
+          }
+      })
+      e->attrs->exp_processed = 1;
+
+      if (e->attrs->eattrs->next) {
+          ea_list *t = lp_alloc(pool, ea_scan(e->attrs->eattrs));
+          ea_merge(e->attrs->eattrs, t);
+          e->attrs->eattrs = t;
       }
-  })
-
+      ea_sort(e->attrs->eattrs);
+  }
 
   /* IBGP route reflection, RFC 4456 */ // IS HANDLED BY PLUGINS
   //if (p->is_internal && src->is_internal && (p->local_as == src->local_as))

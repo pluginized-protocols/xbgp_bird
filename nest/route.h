@@ -419,6 +419,7 @@ typedef struct rta {
   u8 scope;				/* Route scope (SCOPE_... -- see ip.h) */
   u8 dest;				/* Route destination type (RTD_...) */
   u8 aflags;
+  byte exp_processed;
   struct nexthop nh;			/* Next hop */
 } rta;
 

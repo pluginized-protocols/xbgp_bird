@@ -58,7 +58,7 @@ uint64_t export_route_rr(bpf_full_args_t *args UNUSED) {
         cluster_array = (uint32_t *) cluster_list->data;
         for(i = 0; i < cluster_list->len / 4; i++) {
             if(cluster_array[i] == pinfo->local_bgp_session->router_id) {
-                ebpf_print("My AS is in the cluster list !\n");
+                ebpf_print("My AS %d is in the cluster list (rcv %d)!\n", pinfo->local_bgp_session->router_id, src_info->router_id);
                 return PLUGIN_FILTER_REJECT;
             }
         }

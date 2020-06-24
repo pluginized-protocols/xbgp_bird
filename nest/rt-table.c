@@ -582,6 +582,7 @@ export_filter_(struct channel *c, rte *rt0, rte **rt_free, linpool *pool, int si
   *rt_free = NULL;
 
   v = p->preexport ? p->preexport(p, &rt, pool) : 0;
+  ea_normalize(rt->attrs->eattrs);
   if (v < 0)
     {
       if (silent)
