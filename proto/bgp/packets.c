@@ -12,7 +12,7 @@
 
 #include <stdlib.h>
 #include <netdb.h>
-#include <public.h>
+#include <ubpf_public.h>
 #include <stdio.h>
 
 #include "nest/bird.h"
@@ -1312,16 +1312,17 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
     return;
   }
 
-  bpf_args_t args[] = {
+  entry_args_t args[] = {
 
             {.arg = s->pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
             {.arg = a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
             {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
             {.arg = n, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
             {.arg = s->channel->c.table, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = LOC_RIB_TABLE},
+            entry_arg_null
   };
 
-  CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, sizeof(args) / sizeof(args[0]), ret_val_filter, {
+  CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, ret_val_filter, {
       // ON ERR
       // no filters made a decision
       // fprintf(stderr, "No decision\n");

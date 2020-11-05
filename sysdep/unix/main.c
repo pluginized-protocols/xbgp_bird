@@ -38,9 +38,10 @@
 #include "conf/conf.h"
 #include "filter/filter.h"
 #include "filter/data.h"
-#include "public.h"
+#include "ubpf_public.h"
 #include "proto/bgp/ubpf_bgp.h"
 #include <limits.h>
+#include <ebpf_mod_struct.h>
 
 #include "unix.h"
 #include "krt.h"
@@ -63,13 +64,23 @@ static proto_ext_fun_t funcs[] = {
         proto_ext_func_null,
 };
 
-static plugin_info_t plugins[] = {
-        {.plugin_id = BGP_MED_DECISION, .plugin_str="bgp_med_decision"},
-        {.plugin_id = BGP_DECODE_ATTR, .plugin_str="bgp_decode_attr"},
-        {.plugin_id = BGP_ENCODE_ATTR, .plugin_str="bgp_encode_attr"},
-        {.plugin_id = BGP_PRE_INBOUND_FILTER, .plugin_str="bgp_pre_inbound_filter"},
-        {.plugin_id = BGP_PRE_OUTBOUND_FILTER, .plugin_str="bgp_pre_outbound_filter"},
-        plugin_info_null
+static insertion_point_info_t plugins[] = {
+        {.insertion_point_id = BGP_PRE_DECISION, .insertion_point_str="bgp_pre_decision"},
+        {.insertion_point_id = BGP_NEXTHOP_RESOLVABLE_DECISION, .insertion_point_str="bgp_nexthop_resolvable_decision"},
+        {.insertion_point_id = BGP_LOCAL_PREF_DECISION, .insertion_point_str="bgp_local_pref_decision"},
+        {.insertion_point_id = BGP_AS_PATH_LENGTH_DECISION, .insertion_point_str="bgp_as_path_length_decision"},
+        {.insertion_point_id = BGP_MED_DECISION, .insertion_point_str="bgp_med_decision"},
+        {.insertion_point_id = BGP_USE_ORIGIN_DECISION, .insertion_point_str="bgp_use_origin_decision"},
+        {.insertion_point_id = BGP_PREFER_EXTERNAL_PEER_DECISION, .insertion_point_str="bgp_prefer_external_peer_decision"},
+        {.insertion_point_id = BGP_IGP_COST_DECISION, .insertion_point_str="bgp_igp_cost_decision"},
+        {.insertion_point_id = BGP_ROUTER_ID_DECISION, .insertion_point_str="bgp_router_id_decision"},
+        {.insertion_point_id = BGP_IPADDR_DECISION, .insertion_point_str="bgp_ipaddr_decision"},
+        {.insertion_point_id = BGP_POST_DECISION, .insertion_point_str="bgp_post_decision"},
+        {.insertion_point_id = BGP_DECODE_ATTR, .insertion_point_str="bgp_decode_attr"},
+        {.insertion_point_id = BGP_ENCODE_ATTR, .insertion_point_str="bgp_encode_attr"},
+        {.insertion_point_id = BGP_PRE_INBOUND_FILTER, .insertion_point_str="bgp_pre_inbound_filter"},
+        {.insertion_point_id = BGP_PRE_OUTBOUND_FILTER, .insertion_point_str="bgp_pre_outbound_filter"},
+        insertion_point_info_null
 };
 
 static const char *plugin_manifest = NULL;
@@ -1009,7 +1020,7 @@ main(int argc, char **argv)
                           plugins, NULL, NULL, 0) != 0)
       die("Cannot init plugin manager");
 
-  if(load_plugin_from_json(the_plugin_manifest, the_plugin_location_dir, strnlen(the_plugin_location_dir, FILENAME_MAX)) != 0) {
+  if(load_extension_code(the_plugin_manifest, the_plugin_location_dir, funcs, plugins) != 0) {
       die("Unable to load plugins");
   }
 

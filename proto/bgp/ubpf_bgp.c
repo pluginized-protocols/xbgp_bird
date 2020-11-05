@@ -6,7 +6,7 @@
 #include <nest/route.h>
 #include <arpa/inet.h>
 #include <stdio.h>
-#include "public.h"
+#include "ubpf_public.h"
 #include "ubpf_bgp.h"
 #include "nest/attrs.h"
 #include "lib/timer.h"
@@ -67,18 +67,6 @@ static eattr *eattr_append(struct linpool *pool, ea_list *e, int id UNUSED) {
     return e_new;
 }
 
-static void *get_arg_from_type(context_t *ctx, unsigned int type_arg) {
-    int i;
-    bpf_full_args_t *fargs;
-
-    fargs = ctx->args;
-    for (i = 0; i < fargs->nargs; i++) {
-        if (fargs->args[i].type == type_arg) {
-            return fargs->args[i].arg;
-        }
-    }
-    return NULL;
-}
 
 static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oiseau) {
 
@@ -112,13 +100,8 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
 int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *decoded_attr) {
 
-    bpf_full_args_t *args = ctx->args;
-
-    if (!safe_args(args, 4, ATTRIBUTE_LIST)) return -1;
-    if (!safe_args(args, 5, PARSE_STATE)) return -1;
-
-    ea_list *to = get_arg(args, 4, ea_list *);
-    struct bgp_parse_state *s = get_arg(args, 5, struct bgp_parse_state *);
+    ea_list *to = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    struct bgp_parse_state *s = get_arg_from_type(ctx, PARSE_STATE);
 
     // this function copy the memory pointed by
     // decoded_attr to the protocol memory
@@ -181,7 +164,7 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
 struct path_attribute *get_attr(context_t *ctx) {
 
     int i;
-    bpf_full_args_t *fargs;
+    args_t *fargs;
     eattr *bird_attr;
 
     if (!ctx) return NULL; // Should normally not happen. If it does, the virtual machine is broken
@@ -199,7 +182,7 @@ struct path_attribute *get_attr(context_t *ctx) {
 int write_to_buffer(context_t *ctx, uint8_t *ptr, size_t len) {
 
     byte *buf;
-    bpf_full_args_t *fargs;
+    args_t *fargs;
     size_t remaining_len = 0;
 
     if (!ctx || !ptr || len == 0) return -1;
@@ -228,10 +211,8 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
 
     eattr *attr;
     rte *route;
-    bpf_full_args_t *args = ctx->args;
 
-    if (!safe_args(args, args_rte, BGP_ROUTE)) return NULL;
-    route = get_arg(args, args_rte, rte *);
+    route = get_arg_from_type(ctx, BGP_ROUTE);
 
     if (!(attr = bgp_find_attr(route->attrs->eattrs, code))) return NULL;
 
@@ -321,7 +302,7 @@ static int set_peer_info_(context_t *ctx, int key, void *value, int len, int typ
         return -1;
     }
 
-    if (add_single_mempool(mp, key, NULL, len, value) != 0) return -1;
+    if (add_mempool(mp, key, NULL, len, value,0) != 0) return -1;
 
     return 0;
 }
@@ -486,5 +467,22 @@ struct ubpf_rib_entry *get_rib_in_entry(context_t *ctx, uint8_t af_family, union
     return NULL;
 
     //net_route(table_in, )
+
+}
+
+
+struct bgp_route *get_bgp_route(enum BGP_ROUTE_TYPE type) {
+
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+
+    /*switch (type) {
+        case BGP_ROUTE_TYPE_NEW:
+            break;
+        case BGP_ROUTE_TYPE_OLD:
+            break;
+        default:
+            break;
+    }*/
 
 }

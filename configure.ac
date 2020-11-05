@@ -181,7 +181,7 @@ AC_MSG_RESULT([$CFLAGS])
 AC_MSG_CHECKING([LDFLAGS])
 AC_MSG_RESULT([$LDFLAGS])
 
-AC_CHECK_HEADER([public_bpf.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
 
 AC_CHECK_LIB([ubpf], [init_plugin_manager],
                [], [AC_MSG_ERROR([libubpf not found (use LIBUBPF variable to include it)])],
