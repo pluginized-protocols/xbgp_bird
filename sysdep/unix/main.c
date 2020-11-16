@@ -749,9 +749,12 @@ display_help(void)
     "  -R                   Apply graceful restart recovery after start\n"
     "  -s <control-socket>  Use given filename for a control socket\n"
     "  -u <user>            Drop privileges and use given user ID\n"
-    "  -x <extra-conf>      Path to the extra conf used by plugins\n"
-    "  -y <plugin-path>     Path to find the eBPF bytecode\n"
-    "  -z <plugin-manifest> Path to the manifest containing plugins to load\n"
+    "  -x <extra-conf>      Path to the extra conf used by plugins. Default is\n"
+    "                       " PATH_CONFIG_PLUGINS_EXTRA_CONF "\n"
+    "  -y <plugin-path>     Path to find the eBPF bytecode. Default is\n"
+    "                       " PATH_CONFIG_PLUGINS_DIR "\n"
+    "  -z <plugin-manifest> Path to the manifest containing plugins to load. Default is\n"
+    "                       " PATH_CONFIG_PLUGINS_MANIFEST "\n"
     "  --version            Display version of BIRD\n");
 
   exit(0);
@@ -975,48 +978,27 @@ main(int argc, char **argv)
   /* init ubpf_manager */
   const char *the_plugin_manifest;
   const char *the_plugin_location_dir;
-  const char *the_conf_dir;
   const char *the_plugin_extra_conf;
-
-  char copied_config_dir[PATH_MAX];
-  char real_config_name[PATH_MAX];
-  char manifest_path[PATH_MAX];
-  char plugin_loc_dir[PATH_MAX];
-  char plugin_extra_cnf[PATH_MAX];
-
-  memset(copied_config_dir, 0, sizeof(char) * PATH_MAX);
-  memset(real_config_name, 0, sizeof(char) * PATH_MAX);
-  memset(manifest_path, 0, sizeof(char) * PATH_MAX);
-  memset(plugin_loc_dir, 0, sizeof(char) * PATH_MAX);
-
-  strncpy(copied_config_dir, PATH_CONFIG_FILE, PATH_MAX);
-
-  realpath(copied_config_dir, real_config_name);
-  the_conf_dir = dirname(real_config_name);
 
   if (plugin_manifest) {
       the_plugin_manifest = plugin_manifest;
   } else { // default
-      snprintf(manifest_path, PATH_MAX, "%s/manifest.json", the_conf_dir);
-      the_plugin_manifest = manifest_path;
+      the_plugin_manifest = PATH_CONFIG_PLUGINS_MANIFEST;
   }
 
    if (plugin_location_dir) {
        the_plugin_location_dir = plugin_location_dir;
    } else {
-       snprintf(manifest_path, PATH_MAX, "%s/plugins", the_conf_dir);
-       the_plugin_location_dir = plugin_loc_dir;
-
+       the_plugin_location_dir = PATH_CONFIG_PLUGINS_DIR;
    }
 
    if (plugin_extra_conf) {
        the_plugin_extra_conf = plugin_extra_conf;
    } else {
-       snprintf(plugin_extra_cnf, PATH_MAX, "%s/extra_conf.json", the_conf_dir);
-       the_plugin_extra_conf = plugin_extra_cnf;
+       the_plugin_extra_conf = PATH_CONFIG_PLUGINS_EXTRA_CONF;
    }
 
-  if (init_plugin_manager(funcs, the_conf_dir, strnlen(the_conf_dir, 2048),
+  if (init_plugin_manager(funcs, PATH_CONFIG_PLUGINS_DIR, strnlen(PATH_CONFIG_PLUGINS_DIR, 2048),
                           plugins, NULL, NULL, 0) != 0)
       die("Cannot init plugin manager");
 

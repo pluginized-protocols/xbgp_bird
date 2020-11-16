@@ -6,7 +6,7 @@
 #define PLUGINIZED_BIRD_XBGP_API_H
 
 #include "ubpf_api_common.h"
-#include "ubpf_prefix.h"
+#include <ubpf_prefix.h>
 
 enum BGP_ROUTE_TYPE {
     BGP_ROUTE_TYPE_UNDEF = 0,
