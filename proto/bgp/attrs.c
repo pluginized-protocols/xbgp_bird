@@ -11,8 +11,10 @@
 #undef LOCAL_DEBUG
 
 #include <stdlib.h>
-#include <public.h>
+#include <ubpf_public.h>
 #include <stdio.h>
+#include <plugin_arguments.h>
+#include <ubpf_public.h>
 
 #include "nest/bird.h"
 #include "nest/iface.h"
@@ -1185,15 +1187,16 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
 
   uint code = EA_ID(a->id);
 
-  bpf_args_t args[] = {
+  entry_args_t args[] = {
       [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
       [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
       [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
       [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE},
       [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
+      entry_arg_null
   };
 
-  CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 5, ret_val_check_encode_attr, {
+  CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, ret_val_check_encode_attr, {
       // Unsuccessful encoding
       if (bgp_attr_known(code)) {
           return bgp_attr_table[code].encode(s, a, buf, size);
@@ -1292,7 +1295,7 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
   }
   else /* Unknown attribute */
   {
-      bpf_args_t args[] = {
+      entry_args_t args[] = {
               [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = UNSIGNED_INT},
               [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = UNSIGNED_INT},
               [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = BYTE_ARRAY},
@@ -1300,8 +1303,9 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
               [4] = {.arg = *to, .len = sizeof(to), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
               [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
               [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+              entry_arg_null
       };
-      CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, sizeof(args) / sizeof(args[0]), ret_val_check_decode, {
+      CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, ret_val_check_decode, {
           if (!(flags & BAF_OPTIONAL))
               WITHDRAW("Unknown attribute (code %u) - conflicting flags (%02x)", code, flags);
 
@@ -1673,7 +1677,7 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
     return 0;
 
   if (!e->attrs->exp_processed) { // temporary fix !
-      bpf_args_t args[] = {
+      entry_args_t args[] = {
               {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
               {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
               {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
@@ -1682,7 +1686,7 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
               {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
       };
 
-      CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, sizeof(args)/sizeof(args[0]), ret_val_filter, {
+      CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, ret_val_filter, {
           // ON ERR
       }, {
           // ON SUCCESS
@@ -1922,12 +1926,24 @@ rte_stale(rte *r)
   return r->u.bgp.stale;
 }
 
+
+#define check_vm_val \
+switch (VM_RETURN_VALUE) { \
+  case RTE_NEW: \
+    return 1; \
+  case RTE_OLD: \
+    return 0; \
+  default: \
+    break;           \
+ }
+
 int
 bgp_rte_better(rte *new, rte *old)
 {
-    bpf_args_t this[] = {
+    entry_args_t this[] = {
             {.arg = new, .len = sizeof(rte), .kind = kind_ptr, .type = BGP_ROUTE},
             {.arg = old, .len = sizeof(rte), .kind = kind_ptr, .type = BGP_ROUTE},
+            entry_arg_null
     };
   struct bgp_proto *new_bgp = (struct bgp_proto *) new->attrs->src->proto;
   struct bgp_proto *old_bgp = (struct bgp_proto *) old->attrs->src->proto;
@@ -1959,45 +1975,62 @@ bgp_rte_better(rte *new, rte *old)
     return 1;
 
  /* Start with local preferences */
-  x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_LOCAL_PREF));
-  y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_LOCAL_PREF));
-  n = x ? x->u.data : new_bgp->cf->default_local_pref;
-  o = y ? y->u.data : old_bgp->cf->default_local_pref;
-  if (n > o)
-    return 1;
-  if (n < o)
-    return 0;
+  CALL_REPLACE_ONLY(BGP_LOCAL_PREF_DECISION, this, ret_val_decision_process, {
+     x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_LOCAL_PREF));
+     y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_LOCAL_PREF));
+     n = x ? x->u.data : new_bgp->cf->default_local_pref;
+     o = y ? y->u.data : old_bgp->cf->default_local_pref;
+     if (n > o)
+         return 1;
+     if (n < o)
+         return 0;
+ }, check_vm_val)
 
-  /* RFC 7311 4.1 - Apply AIGP metric */
-  u64 n2 = bgp_total_aigp_metric(new);
-  u64 o2 = bgp_total_aigp_metric(old);
-  if (n2 < o2)
-    return 1;
-  if (n2 > o2)
-    return 0;
 
-  /* RFC 4271 9.1.2.2. a)  Use AS path lengths */
-  if (new_bgp->cf->compare_path_lengths || old_bgp->cf->compare_path_lengths)
-  {
-    x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_AS_PATH));
-    y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_AS_PATH));
-    n = x ? as_path_getlen(x->u.ptr) : AS_PATH_MAXLEN;
-    o = y ? as_path_getlen(y->u.ptr) : AS_PATH_MAXLEN;
-    if (n < o)
-      return 1;
-    if (n > o)
-      return 0;
-  }
+ CALL_REPLACE_ONLY(BGP_PRE_DECISION, this, ret_val_decision_process, {
+ }, {
+     /* RFC 7311 4.1 - Apply AIGP metric */
+     u64 n2 = bgp_total_aigp_metric(new);
+     u64 o2 = bgp_total_aigp_metric(old);
+     if (n2 < o2)
+         return 1;
+     if (n2 > o2)
+         return 0;
 
-  /* RFC 4271 9.1.2.2. b) Use origins */
-  x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGIN));
-  y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGIN));
-  n = x ? x->u.data : ORIGIN_INCOMPLETE;
-  o = y ? y->u.data : ORIGIN_INCOMPLETE;
-  if (n < o)
-    return 1;
-  if (n > o)
-    return 0;
+     check_vm_val)
+ }
+
+
+  CALL_REPLACE_ONLY(BGP_AS_PATH_LENGTH_DECISION, this, ret_val_decision_process, {
+      /* RFC 4271 9.1.2.2. a)  Use AS path lengths */
+      if (new_bgp->cf->compare_path_lengths || old_bgp->cf->compare_path_lengths)
+      {
+          x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_AS_PATH));
+          y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_AS_PATH));
+          n = x ? as_path_getlen(x->u.ptr) : AS_PATH_MAXLEN;
+          o = y ? as_path_getlen(y->u.ptr) : AS_PATH_MAXLEN;
+          if (n < o)
+              return 1;
+          if (n > o)
+              return 0;
+      }
+  },
+      check_vm_val
+  )
+
+  CALL_REPLACE_ONLY(BGP_USE_ORIGIN_DECISION, this, ret_val_decision_process, {
+
+      /* RFC 4271 9.1.2.2. b) Use origins */
+      x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGIN));
+      y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGIN));
+      n = x ? x->u.data : ORIGIN_INCOMPLETE;
+      o = y ? y->u.data : ORIGIN_INCOMPLETE;
+      if (n < o)
+          return 1;
+      if (n > o)
+          return 0;
+
+  }, check_vm_val)
 
   /* RFC 4271 9.1.2.2. c) Compare MED's */
   /* Proper RFC 4271 path selection cannot be interpreted as finding
@@ -2013,7 +2046,7 @@ bgp_rte_better(rte *new, rte *old)
   if (new_bgp->cf->med_metric || old_bgp->cf->med_metric ||
       (bgp_get_neighbor(new) == bgp_get_neighbor(old)))
   {
-      CALL_REPLACE_ONLY(BGP_MED_DECISION, this, 2, ret_val_med_decision, {
+      CALL_REPLACE_ONLY(BGP_MED_DECISION, this, ret_val_decision_process, {
           x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_MULTI_EXIT_DISC));
           y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_MULTI_EXIT_DISC));
           n = x ? x->u.data : new_bgp->cf->default_med;
@@ -2035,47 +2068,61 @@ bgp_rte_better(rte *new, rte *old)
   }
 
   /* RFC 4271 9.1.2.2. d) Prefer external peers */
-  if (new_bgp->is_interior > old_bgp->is_interior)
-    return 0;
-  if (new_bgp->is_interior < old_bgp->is_interior)
-    return 1;
 
-  /* RFC 4271 9.1.2.2. e) Compare IGP metrics */
-  n = new_bgp->cf->igp_metric ? new->attrs->igp_metric : 0;
-  o = old_bgp->cf->igp_metric ? old->attrs->igp_metric : 0;
-  if (n < o)
-    return 1;
-  if (n > o)
-    return 0;
+  CALL_REPLACE_ONLY(BGP_PREFER_EXTERNAL_PEER_DECISION, this, ret_val_decision_process, {
+      if (new_bgp->is_interior > old_bgp->is_interior)
+          return 0;
+      if (new_bgp->is_interior < old_bgp->is_interior)
+          return 1;
+  }, check_vm_val)
 
-  /* RFC 4271 9.1.2.2. f) Compare BGP identifiers */
-  /* RFC 4456 9. a) Use ORIGINATOR_ID instead of local neighbor ID */
-  x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGINATOR_ID));
-  y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGINATOR_ID));
-  n = x ? x->u.data : new_bgp->remote_id;
-  o = y ? y->u.data : old_bgp->remote_id;
 
-  /* RFC 5004 - prefer older routes */
-  /* (if both are external and from different peer) */
-  if ((new_bgp->cf->prefer_older || old_bgp->cf->prefer_older) &&
-      !new_bgp->is_internal && n != o)
-    return 0;
+  CALL_REPLACE_ONLY(BGP_IGP_COST_DECISION, this, ret_val_decision_process, {
+      /* RFC 4271 9.1.2.2. e) Compare IGP metrics */
+      n = new_bgp->cf->igp_metric ? new->attrs->igp_metric : 0;
+      o = old_bgp->cf->igp_metric ? old->attrs->igp_metric : 0;
+      if (n < o)
+          return 1;
+      if (n > o)
+          return 0;
+  }, check_vm_val)
 
-  /* rest of RFC 4271 9.1.2.2. f) */
-  if (n < o)
-    return 1;
-  if (n > o)
-    return 0;
 
-  /* RFC 4456 9. b) Compare cluster list lengths */
-  x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_CLUSTER_LIST));
-  y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_CLUSTER_LIST));
-  n = x ? int_set_get_size(x->u.ptr) : 0;
-  o = y ? int_set_get_size(y->u.ptr) : 0;
-  if (n < o)
-    return 1;
-  if (n > o)
-    return 0;
+  CALL_REPLACE_ONLY(BGP_ROUTER_ID_DECISION, this, ret_val_decision_process, {
+      /* RFC 4271 9.1.2.2. f) Compare BGP identifiers */
+      /* RFC 4456 9. a) Use ORIGINATOR_ID instead of local neighbor ID */
+      x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGINATOR_ID));
+      y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_ORIGINATOR_ID));
+      n = x ? x->u.data : new_bgp->remote_id;
+      o = y ? y->u.data : old_bgp->remote_id;
+
+      /* RFC 5004 - prefer older routes */
+      /* (if both are external and from different peer) */
+      if ((new_bgp->cf->prefer_older || old_bgp->cf->prefer_older) &&
+          !new_bgp->is_internal && n != o)
+          return 0;
+
+      /* rest of RFC 4271 9.1.2.2. f) */
+      if (n < o)
+          return 1;
+      if (n > o)
+          return 0;
+
+      /* RFC 4456 9. b) Compare cluster list lengths */
+      x = ea_find(new->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_CLUSTER_LIST));
+      y = ea_find(old->attrs->eattrs, EA_CODE(PROTOCOL_BGP, BA_CLUSTER_LIST));
+      n = x ? int_set_get_size(x->u.ptr) : 0;
+      o = y ? int_set_get_size(y->u.ptr) : 0;
+      if (n < o)
+          return 1;
+      if (n > o)
+          return 0;
+  }, check_vm_val)
+
+  CALL_REPLACE_ONLY(BGP_POST_DECISION, this, ret_val_decision_process, {
+      /* RFC 4271 9.1.2.2. g) Compare peer IP adresses */
+      return ipa_compare(new_bgp->remote_ip, old_bgp->remote_ip) < 0;
+  }, check_vm_val)
 
   /* RFC 4271 9.1.2.2. g) Compare peer IP adresses */
   return ipa_compare(new_bgp->remote_ip, old_bgp->remote_ip) < 0;

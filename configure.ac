@@ -92,7 +92,13 @@ AS_IF([test -z "${runstatedir}"], [runstatedir='${localstatedir}/run'])
 AC_SUBST([runstatedir])
 
 CONFIG_FILE="\$(sysconfdir)/bird.conf"
+CONFIG_PLUGINS_DIR="\$(sysconfdir)/plugins"
+CONFIG_PLUGINS_MANIFEST="${CONFIG_PLUGINS_DIR}/manifest.json"
+CONFIG_PLUGINS_EXTRA_CONF="${CONFIG_PLUGINS_DIR}/extra_conf.json"
 AC_SUBST([CONFIG_FILE])
+AC_SUBST([CONFIG_PLUGINS_DIR])
+AC_SUBST([CONFIG_PLUGINS_MANIFEST])
+AC_SUBST([CONFIG_PLUGINS_EXTRA_CONF])
 
 CONTROL_SOCKET="\$(runstatedir)/bird.ctl"
 AC_SUBST([CONTROL_SOCKET])
@@ -181,7 +187,7 @@ AC_MSG_RESULT([$CFLAGS])
 AC_MSG_CHECKING([LDFLAGS])
 AC_MSG_RESULT([$LDFLAGS])
 
-AC_CHECK_HEADER([public_bpf.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
 
 AC_CHECK_LIB([ubpf], [init_plugin_manager],
                [], [AC_MSG_ERROR([libubpf not found (use LIBUBPF variable to include it)])],

@@ -2,7 +2,7 @@
 // Created by thomas on 2/06/20.
 //
 
-#include "../../public_bpf.h"
+#include "../../bytecode_public.h"
 #include "../../ubpf_prefix.h"
 #include "ubpf_api.h"
 #include "common_security.h"
@@ -57,7 +57,7 @@ as_path_get_last(struct path_attribute *attr, uint32_t *orig_as)
 
 void *memset(void *s, int c, size_t n);
 
-uint64_t prefix_validator(bpf_full_args_t *args UNUSED) {
+uint64_t prefix_validator(args_t *args UNUSED) {
 
     int i;
     int prefix_exists = 0;

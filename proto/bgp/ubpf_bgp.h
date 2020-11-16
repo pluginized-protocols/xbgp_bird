@@ -11,7 +11,18 @@
 #include "ubpf_api_common.h"
 
 enum ubpf_plugins {
-    BGP_MED_DECISION = 1, // decision process MED insertion point
+    BGP_UNUSED = 0 ,
+    BGP_PRE_DECISION,
+    BGP_NEXTHOP_RESOLVABLE_DECISION,
+    BGP_LOCAL_PREF_DECISION,
+    BGP_AS_PATH_LENGTH_DECISION,
+    BGP_MED_DECISION, // decision process MED insertion point
+    BGP_USE_ORIGIN_DECISION,
+    BGP_PREFER_EXTERNAL_PEER_DECISION,
+    BGP_IGP_COST_DECISION,
+    BGP_ROUTER_ID_DECISION,
+    BGP_IPADDR_DECISION,
+    BGP_POST_DECISION,
     BGP_DECODE_ATTR,
     BGP_ENCODE_ATTR,
     BGP_PRE_INBOUND_FILTER,
@@ -38,6 +49,12 @@ enum type {
     RIB_OUT_TABLE,
 };
 
+enum BGP_ROUTE_TYPE {
+    BGP_ROUTE_TYPE_UNDEF = 0,
+    BGP_ROUTE_TYPE_NEW,
+    BGP_ROUTE_TYPE_OLD,
+};
+
 static inline int ret_val_filter(uint64_t a) {
     switch (a) {
         case PLUGIN_FILTER_REJECT:
@@ -60,7 +77,7 @@ static inline int ret_val_check_encode_attr(uint64_t val) {
     return 1;
 }
 
-static int UNUSED ret_val_med_decision(uint64_t val) {
+static int UNUSED ret_val_decision_process(uint64_t val) {
     switch (val) {
         case RTE_NEW:
         case RTE_OLD:

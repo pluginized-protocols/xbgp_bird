@@ -6,7 +6,47 @@
 #define PLUGINIZED_BIRD_XBGP_API_H
 
 #include "ubpf_api_common.h"
-#include "ubpf_prefix.h"
+#include <ubpf_prefix.h>
+
+enum BGP_ROUTE_TYPE {
+    BGP_ROUTE_TYPE_UNDEF = 0,
+    BGP_ROUTE_TYPE_NEW,
+    BGP_ROUTE_TYPE_OLD,
+};
+/* REGISTERED ATTRIBUTE ID */
+
+#define RESERVED_ATTR_ID 0
+#define ORIGIN_ATTR_ID 1
+#define AS_PATH_ATTR_ID 2
+#define NEXT_HOP_ATTR_ID 3
+#define MULTI_EXIT_DISC_ATTR_ID 4
+#define LOCAL_PREF_ATTR_ID 5
+#define ATOMIC_AGGREGATE_ATTR_ID 6
+#define AGGREGATOR_ATTR_ID 7
+#define COMMUNITY_ATTR_ID 8
+#define ORIGINATOR_ID_ATTR_ID 9
+#define CLUSTER_LIST_ATTR_ID 10
+#define MP_REACH_NLRI_ATTR_ID 14
+#define MP_UNREACH_NLRI_ATTR_ID 15
+#define EXTENDED_COMMUNITIES_ATTR_ID 16
+#define AS4_PATH_ATTR_ID 17
+#define AS4_AGGREGATOR_ATTR_ID 18
+#define PMSI_TUNNEL_ATTR_ID 22
+#define TUNNEL_ENCAPSULATION_ATTRIBUTE_ATTR_ID 23
+#define TRAFFIC_ENGINEERING_ATTR_ID 24
+#define IPV6_ADDRESS_SPECIFIC_EXTENDED_COMMUNITY_ATTR_ID 25
+#define AIGP_ATTR_ID 26
+#define PE_DISTINGUISHER_LABELS_ATTR_ID 27
+#define BGPLS_ATTRIBUTE_ATTR_ID 29
+#define LARGE_COMMUNITY_ATTR_ID 32
+#define BGPSEC_PATH_ATTR_ID 33
+#define BGP_COMMUNITY_CONTAINER_ATTRIBUTE_TEMPORARY_REGISTERED_20170728_ATTR_ID 34
+#define ONLY_TO_CUSTOMER_OTC_TEMPORARY_REGISTERED_20180329_ATTR_ID 35
+#define BGP_DOMAIN_PATH_DPATH_TEMPORARY_REGISTERED_20190708_ATTR_ID 36
+#define SFP_ATTRIBUTE_ATTR_ID 37
+#define BGP_PREFIXSID_ATTR_ID 40
+#define ATTR_SET_ATTR_ID 128
+
 
 /**
  * Adds a new attribute to the route processed by the current plugin
@@ -159,5 +199,15 @@ extern struct ubpf_rib_entry *get_rib_in_entry(uint8_t af_family, union ubpf_pre
 extern struct ubpf_rib_entry *get_rib_out_entry(uint8_t af_family, union ubpf_prefix *pfx);
 
 extern struct ubpf_rib_entry *get_loc_rib_entry(uint8_t af_family, union ubpf_prefix *pfx);
+
+
+/**
+ * Retrieve the current BGP route being processed in the insertion point
+ *
+ * @param which_route Given the Insertion point (and if multiple route are involved), select the route to be
+ *                    loaded in the VM.
+ * @return The BGP route
+ */
+extern struct bgp_route *get_bgp_route(enum BGP_ROUTE_TYPE type);
 
 #endif //PLUGINIZED_BIRD_XBGP_API_H
