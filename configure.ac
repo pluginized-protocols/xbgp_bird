@@ -172,6 +172,7 @@ AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([rt library not found)])])
 
 AC_ARG_VAR([LIBUBPF], [Location of libubpf])
 AC_ARG_VAR([HUBPF], [Header loctation of libubpf])
+AC_ARG_VAR([XBGP], [Header location of xbgp compliant api])
 
 AS_IF([test "$LIBUBPF" != "no"],
 	  [LDFLAGS="-L${LIBUBPF} ${LDFLAGS}"],
@@ -181,6 +182,10 @@ AS_IF([test "HUBPF" != "no"],
       [CFLAGS="$CFLAGS -I${HUBPF}"],
       [])
 
+AS_IF([test "XBGP" != "no"],
+      [CFLAGS="$CFLAGS -I${XBGP}"],
+      [])
+
 AC_MSG_CHECKING([CFLAGS])
 AC_MSG_RESULT([$CFLAGS])
 
@@ -188,6 +193,7 @@ AC_MSG_CHECKING([LDFLAGS])
 AC_MSG_RESULT([$LDFLAGS])
 
 AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+AC_CHECK_HEADER([xbgp_compliant_api/xbgp_defs.h], [], [AC_MSG_ERROR([xBGP headers not found (use XBGP to tell its location)])])
 
 AC_CHECK_LIB([ubpf], [init_plugin_manager],
                [], [AC_MSG_ERROR([libubpf not found (use LIBUBPF variable to include it)])],
