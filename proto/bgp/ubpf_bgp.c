@@ -12,7 +12,9 @@
 #include "lib/timer.h"
 #include "nest/protocol.h"
 #include "bgp.h"
-#include "ubpf_prefix.h"
+
+#include <xbgp_compliant_api/xbgp_plugin_host_api.h>
+#include <xbgp_compliant_api/xbgp_defs.h>
 
 static inline int is_u32_attr(word id) {
 
@@ -76,29 +78,26 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
     if (!oiseau) return NULL;
 
-    attr_path = ctx_malloc(ctx, sizeof(struct path_attribute));
+    attr_len = (is_u32 = (oiseau->type & EAF_EMBEDDED)) ? sizeof(uint32_t) :
+               oiseau->u.ptr->length;
+
+    attr_path = ctx_malloc(ctx, sizeof(struct path_attribute) + attr_len);
     if (!attr_path) return NULL;
 
     attr_path->code = EA_ID(oiseau->id);
     attr_path->flags = oiseau->flags;
-
-    attr_len = (is_u32 = (oiseau->type & EAF_EMBEDDED)) ? sizeof(uint32_t) :
-               oiseau->u.ptr->length;
-
-    attr_path->data = ctx_malloc(ctx, attr_len);
-    if (!attr_path->data) return NULL;
-    attr_path->len = attr_len;
+    attr_path->length = attr_len;
 
     if (!is_u32) {
         memcpy(attr_path->data, oiseau->u.ptr->data, attr_len);
     } else {
-        *attr_path->data = oiseau->u.data;
+        *(uint32_t *)attr_path->data = oiseau->u.data;
     }
     return attr_path;
 
 }
 
-int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *decoded_attr) {
+int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
 
     ea_list *to = get_arg_from_type(ctx, ATTRIBUTE_LIST);
     struct bgp_parse_state *s = get_arg_from_type(ctx, PARSE_STATE);
@@ -121,7 +120,6 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
     eattr *attr_stored;
 
     if (!attr) return -1;
-    if (!attr->data) return -1;
 
     attr_list = get_arg_from_type(ctx, ATTRIBUTE_LIST);
     if (!attr_list) return -1;
@@ -139,21 +137,21 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
         attr_stored->flags |= 1u; // pluginized attribute.
         attr_stored->type = EAF_TYPE_OPAQUE;
 
-        a = lp_alloc_adata(pool, attr->len);
+        a = lp_alloc_adata(pool, attr->length);
 
         if (!a) return -1;
 
-        memcpy(a->data, attr->data, attr->len);
+        memcpy(a->data, attr->data, attr->length);
         attr_stored->u.ptr = a;
     } else { // replace existing one
         attr_stored->flags = attr->flags;
         if (attr_stored->type & EAF_EMBEDDED) {
             attr_stored->u.data = *((uint32_t *) attr->data);
         } else {
-            if (attr_stored->u.ptr->length < attr->len) {
+            if (attr_stored->u.ptr->length < attr->length) {
                 return -1;
             }
-            memcpy(attr_stored->u.ptr->data, attr->data, attr->len);
+            memcpy(attr_stored->u.ptr->data, attr->data, attr->length);
         }
 
         attr_stored->type |= EAF_FRESH;
@@ -207,12 +205,12 @@ int write_to_buffer(context_t *ctx, uint8_t *ptr, size_t len) {
     return 0;
 }
 
-struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, int args_rte) {
-
+struct path_attribute *get_attr_from_code_by_route(context_t *ctx, uint8_t code, int arg_rte) {
     eattr *attr;
     rte *route;
 
-    route = get_arg_from_type(ctx, BGP_ROUTE);
+    // TODO
+    route = get_arg_from_type(ctx, arg_rte);
 
     if (!(attr = bgp_find_attr(route->attrs->eattrs, code))) return NULL;
 
@@ -311,7 +309,7 @@ int set_peer_info_src(context_t *ctx, int key, void *value, int len) {
     return set_peer_info_(ctx, key, value, len, BGP_SRC_INFO);
 }
 
-int set_peer_info(context_t *ctx, int key, void *value, int len) {
+int set_peer_info(context_t *ctx, uint32_t router_id, int key, void *value, int len) {
     return set_peer_info_(ctx, key, value, len, BGP_TO_INFO);
 }
 
@@ -352,9 +350,10 @@ void *get_peer_info_extra(context_t *ctx, int key) {
 }
 
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
+    size_t attr_len;
     ea_list *attr_list;
     eattr *attr;
-    struct path_attribute *plugin_attr;
+    struct path_attribute *plugin_attr = NULL;
     uint8_t *data;
 
     attr_list = get_arg_from_type(ctx, ATTRIBUTE_LIST);
@@ -362,34 +361,32 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
     attr = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, code));
     if (!attr) return NULL;
 
-    plugin_attr = ctx_malloc(ctx, sizeof(*plugin_attr));
+    if (attr->type & EAF_EMBEDDED) {;
+        data = (uint8_t *) &attr->u.data;
+        attr_len = 4;
+    } else {
+        data = (uint8_t *) attr->u.ptr->data;
+        attr_len = attr->u.ptr->length;
+    }
+
+    plugin_attr = ctx_malloc(ctx, sizeof(*plugin_attr) + attr_len);
     if (!plugin_attr) return NULL;
 
     plugin_attr->code = code;
     plugin_attr->flags = attr->flags;
-    if (attr->type & EAF_EMBEDDED) {
-        data = ctx_malloc(ctx, sizeof(uint32_t));
-        if (!data) return NULL;
-        memcpy(data, &attr->u.data, 4);
-        plugin_attr->len = 4;
-    } else {
-        data = ctx_malloc(ctx, attr->u.ptr->length);
-        if (!data) return NULL;
-        memcpy(data, attr->u.ptr->data, attr->u.ptr->length);
-        plugin_attr->len = attr->u.ptr->length;
-    }
-    plugin_attr->data = data;
+    plugin_attr->length = attr_len;
+    memcpy(plugin_attr->data, data, attr_len);
     return plugin_attr;
 }
 
 
-union ubpf_prefix *get_prefix(context_t *ctx) {
+struct ubpf_prefix *get_prefix(context_t *ctx) {
 
     net_addr *n = get_arg_from_type(ctx, PREFIX);
     net_addr_ip4 *nip4;
     net_addr_ip6 *nip6;
 
-    union ubpf_prefix *prfx;
+    struct ubpf_prefix *prfx;
     struct in6_addr in6;
 
     if (!n) return NULL;
@@ -399,16 +396,12 @@ union ubpf_prefix *get_prefix(context_t *ctx) {
 
     if (n->type == NET_IP4) {
         nip4 = (net_addr_ip4 *) n;
-
-        prfx->family = AF_INET;
-
-        prfx->ip4_pfx.family = AF_INET;
-        prfx->ip4_pfx.prefix_len = n->pxlen;
-        prfx->ip4_pfx.p.s_addr = htonl(ip4_to_u32(nip4->prefix));
-
+        prfx->afi = XBGP_AFI_IPV4;
+        prfx->prefixlen = n->pxlen;
+        *(uint32_t *)prfx->u =  htonl(ip4_to_u32(nip4->prefix));
     } else if (n->type == NET_IP6) {
 
-        prfx->family = AF_INET6;
+        prfx->afi = XBGP_AFI_IPV6;
 
         nip6 = (net_addr_ip6 *) n;
         memset(&in6, 0, sizeof(in6));
@@ -418,10 +411,8 @@ union ubpf_prefix *get_prefix(context_t *ctx) {
         in6.s6_addr32[2] = htonl(nip6->prefix.addr[2]);
         in6.s6_addr32[3] = htonl(nip6->prefix.addr[3]);
 
-
-        prfx->ip6_pfx.family = AF_INET6;
-        prfx->ip6_pfx.prefix_len = n->pxlen;
-        prfx->ip6_pfx.p = in6;
+        prfx->prefixlen = n->pxlen;
+        *(struct in6_addr *)prfx->u = in6;
 
     } else {
         return NULL;
@@ -430,7 +421,7 @@ union ubpf_prefix *get_prefix(context_t *ctx) {
     return prfx;
 }
 
-struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx) {
+struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
 
     struct ubpf_nexthop *nexthop_info;
 
@@ -446,16 +437,16 @@ struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx) {
     return nexthop_info;
 }
 
-struct ubpf_rib_entry *get_rib_in_entry(context_t *ctx, uint8_t af_family, union ubpf_prefix *pfx) {
+struct ubpf_rib_entry *get_rib_in_entry(context_t *ctx, uint8_t af_family, struct ubpf_prefix *pfx) {
 
     net_addr conv_pfx;
     rtable *table_in = get_arg_from_type(ctx, RIB_IN_TABLE);
 
-    switch(pfx->family) {
-        case AF_INET:
-            net_fill_ip4(&conv_pfx, ip4_from_u32(ntohl(pfx->ip4_pfx.p.s_addr)), pfx->ip4_pfx.prefix_len);
+    switch(pfx->afi) {
+        case XBGP_AFI_IPV4:
+            net_fill_ip4(&conv_pfx, ip4_from_u32(ntohl(*(uint32_t *)pfx->u)), pfx->prefixlen);
             break;
-        case AF_INET6:
+        case XBGP_AFI_IPV6:
             //net_fill_ip6(&conv_pfx, ip)
             break;
         default:
@@ -471,7 +462,7 @@ struct ubpf_rib_entry *get_rib_in_entry(context_t *ctx, uint8_t af_family, union
 }
 
 
-struct bgp_route *get_bgp_route(enum BGP_ROUTE_TYPE type) {
+struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
 
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();

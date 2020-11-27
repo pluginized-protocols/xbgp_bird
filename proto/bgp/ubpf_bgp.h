@@ -7,27 +7,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-
-#include "ubpf_api_common.h"
-
-enum ubpf_plugins {
-    BGP_UNUSED = 0 ,
-    BGP_PRE_DECISION,
-    BGP_NEXTHOP_RESOLVABLE_DECISION,
-    BGP_LOCAL_PREF_DECISION,
-    BGP_AS_PATH_LENGTH_DECISION,
-    BGP_MED_DECISION, // decision process MED insertion point
-    BGP_USE_ORIGIN_DECISION,
-    BGP_PREFER_EXTERNAL_PEER_DECISION,
-    BGP_IGP_COST_DECISION,
-    BGP_ROUTER_ID_DECISION,
-    BGP_IPADDR_DECISION,
-    BGP_POST_DECISION,
-    BGP_DECODE_ATTR,
-    BGP_ENCODE_ATTR,
-    BGP_PRE_INBOUND_FILTER,
-    BGP_PRE_OUTBOUND_FILTER,
-};
+#include <xbgp_compliant_api/xbgp_defs.h>
 
 enum type {
     TYPE_NULL = 0,
@@ -49,18 +29,12 @@ enum type {
     RIB_OUT_TABLE,
 };
 
-enum BGP_ROUTE_TYPE {
-    BGP_ROUTE_TYPE_UNDEF = 0,
-    BGP_ROUTE_TYPE_NEW,
-    BGP_ROUTE_TYPE_OLD,
-};
-
 static inline int ret_val_filter(uint64_t a) {
     switch (a) {
         case PLUGIN_FILTER_REJECT:
         case PLUGIN_FILTER_ACCEPT:
             return 1;
-        case PLUGIN_FILTER_UNK:
+        case PLUGIN_FILTER_UNKNOWN:
         default:
             return 0;
     }
@@ -79,41 +53,13 @@ static inline int ret_val_check_encode_attr(uint64_t val) {
 
 static int UNUSED ret_val_decision_process(uint64_t val) {
     switch (val) {
-        case RTE_NEW:
-        case RTE_OLD:
+        case BGP_ROUTE_TYPE_NEW:
+        case BGP_ROUTE_TYPE_OLD:
             return 1;
-        case RTE_UNK:
+        case BGP_ROUTE_TYPE_UNKNOWN:
         default:
             return 0;
     }
 }
-
-int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *decoded_attr);
-
-struct path_attribute *get_attr(context_t *ctx);
-
-int set_attr(context_t *ctx, struct path_attribute *attr);
-
-int write_to_buffer(context_t *ctx, uint8_t *buf, size_t len);
-
-struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, int args_rte);
-
-struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers);
-
-struct ubpf_peer_info *get_src_peer_info(context_t *ctx);
-
-void *get_peer_info_src_extra(context_t *ctx, int key);
-
-void *get_peer_info_extra(context_t *ctx, int key);
-
-int set_peer_info(context_t *ctx, int key, void *value, int len);
-
-int set_peer_info_src(context_t *ctx, int key, void *value, int len);
-
-struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code);
-
-union ubpf_prefix *get_prefix(context_t *ctx);
-
-struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx);
 
 #endif //PLUGINIZED_BIRD_UBPF_BGP_H

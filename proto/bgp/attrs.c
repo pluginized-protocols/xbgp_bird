@@ -29,6 +29,8 @@
 #include "bgp.h"
 #include "ubpf_bgp.h"
 
+#include <xbgp_compliant_api/xbgp_defs.h>
+
 /*
  *   UPDATE message error handling
  *
@@ -1695,7 +1697,7 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
                   return -1;
               case PLUGIN_FILTER_ACCEPT:
                   return 0;
-              case PLUGIN_FILTER_UNK:
+              case PLUGIN_FILTER_UNKNOWN:
                   default:
                   break;
           }
@@ -1929,9 +1931,9 @@ rte_stale(rte *r)
 
 #define check_vm_val \
 switch (VM_RETURN_VALUE) { \
-  case RTE_NEW: \
+  case BGP_ROUTE_TYPE_NEW: \
     return 1; \
-  case RTE_OLD: \
+  case BGP_ROUTE_TYPE_OLD: \
     return 0; \
   default: \
     break;           \
@@ -2057,9 +2059,9 @@ bgp_rte_better(rte *new, rte *old)
               return 0;
       }, {
         switch (VM_RETURN_VALUE) {
-            case RTE_NEW:
+            case BGP_ROUTE_TYPE_NEW:
               return 1;
-            case RTE_OLD:
+            case BGP_ROUTE_TYPE_OLD:
               return 0;
             default:
               break;
