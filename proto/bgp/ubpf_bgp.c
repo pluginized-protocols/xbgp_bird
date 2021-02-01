@@ -99,7 +99,7 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
 
-    ea_list *to = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    ea_list *to = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     struct bgp_parse_state *s = get_arg_from_type(ctx, PARSE_STATE);
 
     // this function copy the memory pointed by
@@ -121,7 +121,7 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
 
     if (!attr) return -1;
 
-    attr_list = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    attr_list = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!attr_list) return -1;
 
     attr_stored = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, attr->code));
@@ -356,7 +356,7 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
     struct path_attribute *plugin_attr = NULL;
     uint8_t *data;
 
-    attr_list = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    attr_list = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!attr_list) return NULL;
     attr = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, code));
     if (!attr) return NULL;
@@ -382,7 +382,7 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
 
 struct ubpf_prefix *get_prefix(context_t *ctx) {
 
-    net_addr *n = get_arg_from_type(ctx, PREFIX);
+net_addr *n = get_arg_from_type(ctx, ARG_BGP_PREFIX);
     net_addr_ip4 *nip4;
     net_addr_ip6 *nip6;
 

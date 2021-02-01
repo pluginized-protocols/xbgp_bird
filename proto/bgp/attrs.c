@@ -1192,7 +1192,7 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
   entry_args_t args[] = {
       [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
       [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
-      [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ATTRIBUTE},
+      [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE},
       [3] = {.arg = s, .len = sizeof(struct bgp_write_state *), .kind = kind_hidden, .type = WRITE_STATE},
       [4] = {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
       entry_arg_null
@@ -1298,11 +1298,11 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
   else /* Unknown attribute */
   {
       entry_args_t args[] = {
-              [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = UNSIGNED_INT},
-              [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = UNSIGNED_INT},
-              [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = BYTE_ARRAY},
-              [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = UNSIGNED_INT},
-              [4] = {.arg = *to, .len = sizeof(to), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+              [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = ARG_CODE},
+              [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = ARG_FLAGS},
+              [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = ARG_DATA},
+              [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = ARG_LENGTH},
+              [4] = {.arg = *to, .len = sizeof(to), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
               [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
               [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
               entry_arg_null
@@ -1683,9 +1683,9 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
               {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
               {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
               {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
-              {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+              {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
               {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
-              {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
+              {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ROUTE_RIB},
       };
 
       CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, ret_val_filter, {
@@ -1943,8 +1943,8 @@ int
 bgp_rte_better(rte *new, rte *old)
 {
     entry_args_t this[] = {
-            {.arg = new, .len = sizeof(rte), .kind = kind_ptr, .type = BGP_ROUTE},
-            {.arg = old, .len = sizeof(rte), .kind = kind_ptr, .type = BGP_ROUTE},
+            {.arg = new, .len = sizeof(rte), .kind = kind_ptr, .type = ARG_BGP_ROUTE_NEW},
+            {.arg = old, .len = sizeof(rte), .kind = kind_ptr, .type = ARG_BGP_ROUTE_OLD},
             entry_arg_null
     };
   struct bgp_proto *new_bgp = (struct bgp_proto *) new->attrs->src->proto;
