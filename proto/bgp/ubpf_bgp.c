@@ -169,7 +169,7 @@ struct path_attribute *get_attr(context_t *ctx) {
 
     fargs = ctx->args;
     for (i = 0; i < fargs->nargs; i++) {
-        if (fargs->args[i].type == ATTRIBUTE) {
+        if (fargs->args[i].type == ARG_BGP_ATTRIBUTE) {
             bird_attr = fargs->args[i].arg;
             return bird_to_vm_attr(ctx, bird_attr);
         }
@@ -425,7 +425,7 @@ struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
 
     struct ubpf_nexthop *nexthop_info;
 
-    rte *rib_route = get_arg_from_type(ctx, RIB_ROUTE);
+    rte *rib_route = get_arg_from_type(ctx, ARG_BGP_ROUTE_RIB);
     if (!rib_route) return NULL;
 
     nexthop_info = ctx_malloc(ctx, sizeof (*nexthop_info));
@@ -462,7 +462,7 @@ struct ubpf_rib_entry *get_rib_in_entry(context_t *ctx, uint8_t af_family, struc
 }
 
 
-struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
+struct bgp_route *get_bgp_route(context_t *ctx UNUSED, enum BGP_ROUTE_TYPE type UNUSED) {
 
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();
