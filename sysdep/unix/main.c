@@ -964,7 +964,7 @@ main(int argc, char **argv)
    }
 
   if (init_plugin_manager(api_funcs, PATH_CONFIG_PLUGINS_DIR, strnlen(PATH_CONFIG_PLUGINS_DIR, 2048),
-                          insertion_points, NULL, NULL, 0) != 0)
+                          insertion_points, 0, NULL) != 0)
       die("Cannot init plugin manager");
 
   if(load_extension_code(the_plugin_manifest, the_plugin_location_dir, api_funcs, insertion_points) != 0) {
