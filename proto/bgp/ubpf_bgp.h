@@ -10,20 +10,16 @@
 #include <xbgp_compliant_api/xbgp_defs.h>
 
 enum type {
-    TYPE_NULL = 0,
+    TYPE_NULL = ARG_MAX_OPAQUE,
     BGP_ROUTE,
     UNSIGNED_INT,
     BYTE_ARRAY,
-    ATTRIBUTE_LIST,
-    ATTRIBUTE,
     PARSE_STATE,
     WRITE_STATE,
     BUFFER_ARRAY,
     BGP_SRC_INFO,
     BGP_TO_INFO,
     HOST_LINPOOL,
-    PREFIX,
-    RIB_ROUTE,
     LOC_RIB_TABLE,
     RIB_IN_TABLE,
     RIB_OUT_TABLE,
