@@ -81,7 +81,7 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
     attr_len = (is_u32 = (oiseau->type & EAF_EMBEDDED)) ? sizeof(uint32_t) :
                oiseau->u.ptr->length;
 
-    attr_path = ctx_malloc(ctx, sizeof(struct path_attribute) + attr_len);
+    attr_path = __ctx_malloc(ctx, sizeof(struct path_attribute) + attr_len);
     if (!attr_path) return NULL;
 
     attr_path->code = EA_ID(oiseau->id);
@@ -257,8 +257,8 @@ static struct ubpf_peer_info *get_peer_info_(context_t *ctx, int which_peer) {
         return NULL;
     }
 
-    peer_info = ctx_malloc(ctx, sizeof(*peer_info));
-    local_info = ctx_malloc(ctx, sizeof(*local_bgp));
+    peer_info = __ctx_malloc(ctx, sizeof(*peer_info));
+    local_info = __ctx_malloc(ctx, sizeof(*local_bgp));
     if (!peer_info || !local_info) {
         return NULL;
     }
@@ -334,7 +334,7 @@ static void *get_peer_info_mp_(context_t *ctx, int key, int which_peer) {
 
     if (get_mempool_data(mp, key, &data) != 0) return NULL;
 
-    plugin_data = ctx_malloc(ctx, data.length);
+    plugin_data = __ctx_malloc(ctx, data.length);
     if (!plugin_data) return NULL;
 
     memcpy(plugin_data, data.data, data.length);
@@ -369,7 +369,7 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
         attr_len = attr->u.ptr->length;
     }
 
-    plugin_attr = ctx_malloc(ctx, sizeof(*plugin_attr) + attr_len);
+    plugin_attr = __ctx_malloc(ctx, sizeof(*plugin_attr) + attr_len);
     if (!plugin_attr) return NULL;
 
     plugin_attr->code = code;
@@ -391,7 +391,7 @@ net_addr *n = get_arg_from_type(ctx, ARG_BGP_PREFIX);
 
     if (!n) return NULL;
 
-    prfx = ctx_malloc(ctx, sizeof(*prfx));
+    prfx = __ctx_malloc(ctx, sizeof(*prfx));
     if (!prfx) return NULL;
 
     if (n->type == NET_IP4) {
@@ -428,7 +428,7 @@ struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
     rte *rib_route = get_arg_from_type(ctx, ARG_BGP_ROUTE_RIB);
     if (!rib_route) return NULL;
 
-    nexthop_info = ctx_malloc(ctx, sizeof (*nexthop_info));
+    nexthop_info = __ctx_malloc(ctx, sizeof (*nexthop_info));
     if (!nexthop_info) return NULL;
 
     nexthop_info->igp_metric = rib_route->attrs->igp_metric;

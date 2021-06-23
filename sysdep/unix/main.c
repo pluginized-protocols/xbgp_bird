@@ -963,7 +963,7 @@ main(int argc, char **argv)
        the_plugin_extra_conf = PATH_CONFIG_PLUGINS_EXTRA_CONF;
    }
 
-  if (init_plugin_manager(api_funcs, PATH_CONFIG_PLUGINS_DIR, strnlen(PATH_CONFIG_PLUGINS_DIR, 2048),
+  if (init_plugin_manager(api_funcs, PATH_CONFIG_PLUGINS_DIR,
                           insertion_points, 0, NULL) != 0)
       die("Cannot init plugin manager");
 
