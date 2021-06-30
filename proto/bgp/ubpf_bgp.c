@@ -477,3 +477,24 @@ struct bgp_route *get_bgp_route(context_t *ctx UNUSED, enum BGP_ROUTE_TYPE type 
     }*/
 
 }
+
+
+int new_rib_iterator(context_t *ctx, int afi, int safi) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+struct bgp_route *next_rib_route(context_t *ctx, unsigned int iterator_id) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+int rib_has_route(context_t *ctx, unsigned int iterator_id) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+void rib_iterator_clean(context_t *ctx, unsigned int iterator_id) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
