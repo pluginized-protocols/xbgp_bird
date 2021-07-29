@@ -12,9 +12,135 @@
 #include "lib/timer.h"
 #include "nest/protocol.h"
 #include "bgp.h"
+//#include "utlist.h"
+//#include "uthash.h"
+//#include <string.h>
+//#include "sysdep/unix/krt.h"
 
 #include <xbgp_compliant_api/xbgp_plugin_host_api.h>
 #include <xbgp_compliant_api/xbgp_defs.h>
+
+
+//struct iterator_node {
+//    struct iterator_node *prev, *next; /* for free list */
+//    UT_hash_handle hh; /* for alloc iterators */
+//
+//    int idx;
+//    size_t len_data;
+//    uint8_t data[0];
+//};
+
+/*
+static inline int it_node_cmp(struct iterator_node *it1, struct iterator_node *it2) {
+    return it1->idx - it2->idx;
+}
+
+static inline struct iterator_node *new_iterator_node(int idx, int len_data) {
+    struct iterator_node *node;
+    node = calloc(1, sizeof(*node) + len_data);
+    if (!node) return NULL;
+
+    node->idx = idx;
+    node->len_data = len_data;
+    return node;
+}
+
+static inline struct iterator_node *realloc_iterator_node_data(struct iterator_node *node, size_t len_data) {
+    if (node->len_data == len_data) return node;
+    return realloc(node, sizeof(*node) + len_data);
+}
+
+static inline void free_iterator_node(struct iterator_node *node) {
+    free(node);
+}
+
+struct rib_iterators_mgr {
+    struct iterator_node *alloc_it;
+    struct iterator_node *free_list;
+
+    int max_alloc_idx;
+
+};
+
+int init_rib_iterators(struct rib_iterators_mgr *rit) {
+    struct iterator_node *free_node;
+
+    rit->alloc_it = NULL;
+    rit->free_list = NULL;
+    rit->max_alloc_idx = -1;
+
+    free_node = new_iterator_node(0, 0);
+    if (!free_node) return -1;
+
+    DL_APPEND(rit->free_list, free_node);
+    return 0;
+}
+
+int alloc_iterator(struct rib_iterators_mgr *rit, void *data, size_t data_len) {
+    struct iterator_node *free_node;
+    struct iterator_node *new_free_node;
+
+    /* take the first item of free list */
+    free_node = rit->free_list;
+    assert(free_node != NULL);
+    DL_DELETE(rit->free_list, free_node);
+
+    if (data_len != free_node->len_data) {
+        free_node = realloc_iterator_node_data(free_node, data_len);
+        if (!free_node) return -1;
+        free_node->len_data = data_len;
+    }
+
+    memcpy(free_node->data, data, data_len);
+    HASH_ADD_INT(rit->alloc_it, idx, free_node);
+
+    rit->max_alloc_idx = MAX(free_node->idx, rit->max_alloc_idx);
+    if (free_node->idx == rit->max_alloc_idx) {
+        /* we need to add a new free node*/
+        assert(rit->free_list == NULL);
+
+        new_free_node = new_iterator_node(rit->max_alloc_idx + 1, 0);
+        if (!new_free_node) return -1;
+        DL_APPEND(rit->free_list, new_free_node);
+    }
+
+    return free_node->idx;
+}
+
+int del_iterator(struct rib_iterators_mgr *rit, int idx) {
+    struct iterator_node *curr = NULL;
+
+    HASH_FIND_INT(rit->alloc_it, &idx, curr);
+    if (!curr) return 0;
+
+    /* delete and replace it in the free list */
+    HASH_DEL(rit->alloc_it, curr);
+    DL_INSERT_INORDER(rit->free_list, curr, it_node_cmp);
+    return 0;
+}
+
+void *get_iterator(struct rib_iterators_mgr *rit, int idx) {
+    struct iterator_node *curr = NULL;
+
+    HASH_FIND_INT(rit->alloc_it, &idx, curr);
+    if (!curr) return NULL;
+
+    return curr->data;
+}
+
+void destroy_iterators_mgr(struct rib_iterators_mgr *rit) {
+    struct iterator_node *curr, *tmp;
+    HASH_ITER(hh, rit->alloc_it, curr, tmp) {
+        HASH_DEL(rit->alloc_it, curr);
+        free_iterator_node(curr);
+    }
+
+    curr = tmp = NULL;
+    DL_FOREACH_SAFE(rit->free_list, curr, tmp) {
+        DL_DELETE(rit->free_list, curr);
+        free_iterator_node(curr);
+    }
+}*/
 
 static inline int is_u32_attr(word id) {
 
@@ -478,10 +604,89 @@ struct bgp_route *get_bgp_route(context_t *ctx UNUSED, enum BGP_ROUTE_TYPE type 
 
 }
 
+/* get the best bgp route exported to the kernel */
+/* impossible to quickly find the best route by looking at the BGP RIB  */
+/*
+#define afi2af(afi) ({\
+  int __af__ = -1;           \
+  switch(afi) {          \
+      case AFI_IPV4:     \
+          __af__ = AF_INET;  \
+          break;         \
+      case AFI_IPV6:     \
+          __af__ = AF_INET6; \
+          break;         \
+      default:       \
+          break;         \
+  }                      \
+  __af__;                      \
+})
+
+static struct rtable *get_bgp_get_fib_afi(u32 afi) {
+    node *n;
+    struct krt_proto *p;
+    struct channel *c;
+
+
+    WALK_LIST(n, proto_list) {
+        p = (struct krt_proto *) n;
+        if (p->p.proto->class == PROTOCOL_KERNEL) {
+            if (p->p.vrf == NULL) {
+                WALK_LIST(c, p->p.channels) {
+                    if (p->af == afi2af(afi)) {
+                        return c->table;
+                    }
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+static struct bgp_proto *get_peer(char *ip) {
+    
+}
+*/
 
 int new_rib_iterator(context_t *ctx, int afi, int safi) {
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();
+    /*struct fib_iterator *fit;
+    struct rtable *table;
+    struct rib_iterators_mgr **rit;
+    struct rib_iterators_mgr *nrit;
+
+    static const char *fib_iterator = "fib_iterator";
+
+    table = get_bgp_get_fib_afi(afi);
+    if (!table) return -1;
+
+    rit = get_runtime_data(ctx->p, fib_iterator);
+    if (!rit) {
+        nrit = malloc(sizeof(*nrit));
+        if (!nrit) return -1;
+        init_rib_iterators(nrit);
+
+        if (new_runtime_data(ctx->p, fib_iterator,
+                             sizeof(fib_iterator) - 1,
+                             &nrit, sizeof(&nrit)) != 0) {
+            return -1;
+        }
+    } else {
+        nrit = *rit;
+    }
+
+    fit = malloc(sizeof(*fit));
+    if (!fit) return -1;
+
+    FIB_ITERATE_INIT(fit, &table->fib);
+
+    FIB_ITERATE_START(&table->fib, fit, net, n) {
+
+        n->routes->attrs->src->proto->proto->class == PROTOCOL_BGP;
+
+    } FIB_ITERATE_END;*/
+
 }
 
 struct bgp_route *next_rib_route(context_t *ctx, unsigned int iterator_id) {
@@ -495,6 +700,27 @@ int rib_has_route(context_t *ctx, unsigned int iterator_id) {
 }
 
 void rib_iterator_clean(context_t *ctx, unsigned int iterator_id) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_peer_info *peer_info) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+int get_vrf(context_t *ctx, struct vrf_info *vrf_info) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, const char *peer_ip) {
+    fprintf(stderr, "Not implemented yet %s\n", __func__ );
+    abort();
+}
+
+
+int peer_session_reset(context_t *ctx, const char *peer_ip) {
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();
 }
