@@ -3121,7 +3121,16 @@ bgp_rx_packet(struct bgp_conn *conn, byte *pkt, uint len)
   case PKT_NOTIFICATION:	return bgp_rx_notification(conn, pkt, len);
   case PKT_KEEPALIVE:		return bgp_rx_keepalive(conn);
   case PKT_ROUTE_REFRESH:	return bgp_rx_route_refresh(conn, pkt, len);
-  default:			bgp_error(conn, 1, 3, pkt+18, 1);
+  default: {
+      entry_args_t args[] = {
+              {.arg = pkt, .len=len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
+              {.arg = &len, .len=sizeof(len), .kind=kind_primitive, .type=ARG_LENGTH},
+              entry_arg_null
+      };
+      CALL_REPLACE_ONLY(BGP_DECODE_MESSAGE, args, ret_val_decode_bgp_message, {
+          bgp_error(conn, 1, 3, pkt+18, 1);
+      });
+  }
   }
 }
 

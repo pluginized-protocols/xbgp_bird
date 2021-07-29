@@ -58,4 +58,8 @@ static int UNUSED ret_val_decision_process(uint64_t val) {
     }
 }
 
+static int ret_val_decode_bgp_message(uint64_t val) {
+    return val == EXIT_SUCCESS ? 1 : 0;
+}
+
 #endif //PLUGINIZED_BIRD_UBPF_BGP_H
