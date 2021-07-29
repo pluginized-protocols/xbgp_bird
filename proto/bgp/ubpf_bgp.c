@@ -81,7 +81,7 @@ int alloc_iterator(struct rib_iterators_mgr *rit, void *data, size_t data_len) {
     struct iterator_node *new_free_node;
 
     /* take the first item of free list */
-    free_node = rit->free_list;
+  /*  free_node = rit->free_list;
     assert(free_node != NULL);
     DL_DELETE(rit->free_list, free_node);
 
@@ -97,7 +97,7 @@ int alloc_iterator(struct rib_iterators_mgr *rit, void *data, size_t data_len) {
     rit->max_alloc_idx = MAX(free_node->idx, rit->max_alloc_idx);
     if (free_node->idx == rit->max_alloc_idx) {
         /* we need to add a new free node*/
-        assert(rit->free_list == NULL);
+      /*  assert(rit->free_list == NULL);
 
         new_free_node = new_iterator_node(rit->max_alloc_idx + 1, 0);
         if (!new_free_node) return -1;
@@ -114,7 +114,7 @@ int del_iterator(struct rib_iterators_mgr *rit, int idx) {
     if (!curr) return 0;
 
     /* delete and replace it in the free list */
-    HASH_DEL(rit->alloc_it, curr);
+    /*HASH_DEL(rit->alloc_it, curr);
     DL_INSERT_INORDER(rit->free_list, curr, it_node_cmp);
     return 0;
 }
