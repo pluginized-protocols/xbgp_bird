@@ -602,6 +602,8 @@ export_filter_(struct channel *c, rte *rt0, rte **rt_free, linpool *pool, int si
 
   rte_make_tmp_attrs(&rt, pool, NULL);
 
+  // TODO check export route here eBPF
+
   v = filter && ((filter == FILTER_REJECT) ||
 		 (f_run(filter, &rt, pool,
 			(silent ? FF_SILENT : 0)) > F_ACCEPT));
