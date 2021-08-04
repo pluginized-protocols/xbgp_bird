@@ -1315,7 +1315,7 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
   entry_args_t args[] = {
 
             {.arg = s->pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
-            {.arg = a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            {.arg = &a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
             {.arg = s->proto, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
             {.arg = n, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_PREFIX},
             {.arg = s->channel->c.table, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = LOC_RIB_TABLE},

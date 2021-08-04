@@ -1302,7 +1302,7 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
               [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = ARG_FLAGS},
               [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = ARG_DATA},
               [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = ARG_LENGTH},
-              [4] = {.arg = *to, .len = sizeof(to), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+              [4] = {.arg = to, .len = sizeof(to), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
               [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
               [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
               entry_arg_null
@@ -1678,38 +1678,38 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
   if (src == NULL)
     return 0;
 
-  if (!e->attrs->exp_processed) { // temporary fix !
-      entry_args_t args[] = {
-              {.arg = e, .len = sizeof(uintptr_t), .kind = kind_hidden,.type = BGP_ROUTE},
-              {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
-              {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
-              {.arg = e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
-              {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
-              {.arg =  e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ROUTE_RIB},
-      };
+  rte *priv_e = rte_cow_rta(e, pool);
+  rta *old_attr = priv_e->attrs;
 
-      CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, ret_val_filter, {
-          // ON ERR
+  entry_args_t args[] = {
+          {.arg = priv_e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_ROUTE},
+          {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+          {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
+          {.arg = &priv_e->attrs->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+          {.arg = pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
+          {.arg =  priv_e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ROUTE_RIB},
+          entry_arg_null
+  };
+
+  CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, ret_val_filter, {
+      // ON ERR
       }, {
-          // ON SUCCESS
-          switch (VM_RETURN_VALUE) {
-              case PLUGIN_FILTER_REJECT:
-                  return -1;
-              case PLUGIN_FILTER_ACCEPT:
-                  return 0;
-              case PLUGIN_FILTER_UNKNOWN:
-                  default:
-                  break;
-          }
-      })
-      e->attrs->exp_processed = 1;
-
-      if (e->attrs->eattrs->next) {
-          ea_list *t = lp_alloc(pool, ea_scan(e->attrs->eattrs));
-          ea_merge(e->attrs->eattrs, t);
-          e->attrs->eattrs = t;
+      // ON SUCCESS
+      switch (VM_RETURN_VALUE) {
+          case PLUGIN_FILTER_REJECT:
+              return -1;
+          case PLUGIN_FILTER_ACCEPT:
+          case PLUGIN_FILTER_UNKNOWN:
+          default:
+              break;
       }
-      ea_sort(e->attrs->eattrs);
+  })
+
+  /* if eBPF modified the route, the top eattrs linked-list differs */
+  if (priv_e->attrs->eattrs != e->attrs->eattrs) {
+      priv_e->attrs = rta_lookup(priv_e->attrs);
+      rta_free(old_attr);
+      *new = priv_e;
   }
 
   /* IBGP route reflection, RFC 4456 */ // IS HANDLED BY PLUGINS
