@@ -170,11 +170,7 @@ static inline int is_u32_attr(word id) {
 
 }
 
-static eattr *eattr_append(struct linpool *pool, ea_list *e, int id UNUSED) {
-
-    while (e->next != NULL) {
-        e = e->next;
-    }
+static eattr *eattr_prepend(struct linpool *pool, ea_list **e, int id UNUSED) {
 
     ea_list *new = lp_alloc(pool, sizeof(ea_list) + sizeof(eattr));
 
@@ -187,10 +183,8 @@ static eattr *eattr_append(struct linpool *pool, ea_list *e, int id UNUSED) {
 
     new->flags = EALF_SORTED;
     new->count = 1;
-    new->next = NULL;
-    e->next = new;
-
-    new->next = NULL;
+    new->next = *e;
+    *e = new;
 
     return e_new;
 }
@@ -225,7 +219,7 @@ static inline struct path_attribute *bird_to_vm_attr(context_t *ctx, eattr *oise
 
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
 
-    ea_list *to = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
+    ea_list **to = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     struct bgp_parse_state *s = get_arg_from_type(ctx, PARSE_STATE);
 
     // this function copy the memory pointed by
@@ -234,7 +228,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     flags |= 1u; // distinguish pluginized attribute from unknown one
     // flags will be reinitialized when exporting, see attr.c:bgp_export_attr
 
-    ea_set_attr_data(&to, s->pool, EA_CODE(PROTOCOL_BGP, code), flags, EAF_TYPE_OPAQUE, decoded_attr, length);
+    ea_set_attr_data(to, s->pool, EA_CODE(PROTOCOL_BGP, code), flags, EAF_TYPE_OPAQUE, decoded_attr, length);
     return 0;
 }
 
@@ -242,7 +236,7 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
     struct linpool *pool;
     struct adata *a;
 
-    ea_list *attr_list = NULL;
+    ea_list **attr_list = NULL;
     eattr *attr_stored;
 
     if (!attr) return -1;
@@ -250,12 +244,12 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
     attr_list = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!attr_list) return -1;
 
-    attr_stored = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, attr->code));
+    attr_stored = ea_find(*attr_list, EA_CODE(PROTOCOL_BGP, attr->code));
     if (!attr_stored) { // add new attr
         pool = get_arg_from_type(ctx, HOST_LINPOOL);
         if (!pool) return -1;
 
-        attr_stored = eattr_append(pool, attr_list, attr->code);
+        attr_stored = eattr_prepend(pool, attr_list, attr->code);
         if (!attr_stored) return -1;
 
         attr_stored->id = EA_CODE(PROTOCOL_BGP, attr->code);
@@ -477,14 +471,14 @@ void *get_peer_info_extra(context_t *ctx, int key) {
 
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
     size_t attr_len;
-    ea_list *attr_list;
+    ea_list **attr_list;
     eattr *attr;
     struct path_attribute *plugin_attr = NULL;
     uint8_t *data;
 
     attr_list = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!attr_list) return NULL;
-    attr = ea_find(attr_list, EA_CODE(PROTOCOL_BGP, code));
+    attr = ea_find(*attr_list, EA_CODE(PROTOCOL_BGP, code));
     if (!attr) return NULL;
 
     if (attr->type & EAF_EMBEDDED) {;
