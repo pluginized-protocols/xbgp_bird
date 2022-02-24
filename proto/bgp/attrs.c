@@ -1189,7 +1189,7 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
 
   uint code = EA_ID(a->id);
 
-  entry_args_t args[] = {
+  entry_arg_t args[] = {
       [0] = {.arg = buf, .len = sizeof(byte *), .kind = kind_hidden, .type = BUFFER_ARRAY},
       [1] = {.arg = &size, .len = sizeof(uint), .kind = kind_hidden, .type = UNSIGNED_INT},
       [2] = {.arg = a, .len = sizeof(eattr), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE},
@@ -1297,7 +1297,7 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
   }
   else /* Unknown attribute */
   {
-      entry_args_t args[] = {
+      entry_arg_t args[] = {
               [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = ARG_CODE},
               [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = ARG_FLAGS},
               [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = ARG_DATA},
@@ -1681,7 +1681,7 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
   rte *priv_e = rte_cow_rta(e, pool);
   rta *old_attr = priv_e->attrs;
 
-  entry_args_t args[] = {
+  entry_arg_t args[] = {
           {.arg = priv_e, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_ROUTE},
           {.arg = src, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
           {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_TO_INFO},
@@ -1942,7 +1942,7 @@ switch (VM_RETURN_VALUE) { \
 int
 bgp_rte_better(rte *new, rte *old)
 {
-    entry_args_t this[] = {
+    entry_arg_t this[] = {
             {.arg = new, .len = sizeof(rte), .kind = kind_ptr, .type = ARG_BGP_ROUTE_NEW},
             {.arg = old, .len = sizeof(rte), .kind = kind_ptr, .type = ARG_BGP_ROUTE_OLD},
             entry_arg_null
@@ -1998,9 +1998,7 @@ bgp_rte_better(rte *new, rte *old)
          return 1;
      if (n2 > o2)
          return 0;
-
-     check_vm_val);
- }
+     check_vm_val});
 
 
   CALL_REPLACE_ONLY(BGP_AS_PATH_LENGTH_DECISION, this, ret_val_decision_process, {
@@ -2016,9 +2014,9 @@ bgp_rte_better(rte *new, rte *old)
           if (n > o)
               return 0;
       }
-  },
+  }, {
       check_vm_val
-  );
+  });
 
   CALL_REPLACE_ONLY(BGP_USE_ORIGIN_DECISION, this, ret_val_decision_process, {
 
