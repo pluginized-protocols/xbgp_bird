@@ -25,6 +25,13 @@ enum type {
     RIB_OUT_TABLE,
 };
 
+struct pending_msgs {
+    node n;
+    int type;
+    size_t buf_len;
+    u8 buf[0];
+};
+
 static inline int ret_val_filter(uint64_t a) {
     switch (a) {
         case PLUGIN_FILTER_REJECT:

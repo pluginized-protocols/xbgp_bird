@@ -13,134 +13,15 @@
 #include "nest/protocol.h"
 #include "bgp.h"
 //#include "utlist.h"
-//#include "uthash.h"
+#include "uthash.h"
 //#include <string.h>
 //#include "sysdep/unix/krt.h"
 
 #include <xbgp_compliant_api/xbgp_plugin_host_api.h>
 #include <xbgp_compliant_api/xbgp_defs.h>
 
+#include "iface.h"
 
-//struct iterator_node {
-//    struct iterator_node *prev, *next; /* for free list */
-//    UT_hash_handle hh; /* for alloc iterators */
-//
-//    int idx;
-//    size_t len_data;
-//    uint8_t data[0];
-//};
-
-/*
-static inline int it_node_cmp(struct iterator_node *it1, struct iterator_node *it2) {
-    return it1->idx - it2->idx;
-}
-
-static inline struct iterator_node *new_iterator_node(int idx, int len_data) {
-    struct iterator_node *node;
-    node = calloc(1, sizeof(*node) + len_data);
-    if (!node) return NULL;
-
-    node->idx = idx;
-    node->len_data = len_data;
-    return node;
-}
-
-static inline struct iterator_node *realloc_iterator_node_data(struct iterator_node *node, size_t len_data) {
-    if (node->len_data == len_data) return node;
-    return realloc(node, sizeof(*node) + len_data);
-}
-
-static inline void free_iterator_node(struct iterator_node *node) {
-    free(node);
-}
-
-struct rib_iterators_mgr {
-    struct iterator_node *alloc_it;
-    struct iterator_node *free_list;
-
-    int max_alloc_idx;
-
-};
-
-int init_rib_iterators(struct rib_iterators_mgr *rit) {
-    struct iterator_node *free_node;
-
-    rit->alloc_it = NULL;
-    rit->free_list = NULL;
-    rit->max_alloc_idx = -1;
-
-    free_node = new_iterator_node(0, 0);
-    if (!free_node) return -1;
-
-    DL_APPEND(rit->free_list, free_node);
-    return 0;
-}
-
-int alloc_iterator(struct rib_iterators_mgr *rit, void *data, size_t data_len) {
-    struct iterator_node *free_node;
-    struct iterator_node *new_free_node;
-
-    /* take the first item of free list */
-  /*  free_node = rit->free_list;
-    assert(free_node != NULL);
-    DL_DELETE(rit->free_list, free_node);
-
-    if (data_len != free_node->len_data) {
-        free_node = realloc_iterator_node_data(free_node, data_len);
-        if (!free_node) return -1;
-        free_node->len_data = data_len;
-    }
-
-    memcpy(free_node->data, data, data_len);
-    HASH_ADD_INT(rit->alloc_it, idx, free_node);
-
-    rit->max_alloc_idx = MAX(free_node->idx, rit->max_alloc_idx);
-    if (free_node->idx == rit->max_alloc_idx) {
-        /* we need to add a new free node*/
-      /*  assert(rit->free_list == NULL);
-
-        new_free_node = new_iterator_node(rit->max_alloc_idx + 1, 0);
-        if (!new_free_node) return -1;
-        DL_APPEND(rit->free_list, new_free_node);
-    }
-
-    return free_node->idx;
-}
-
-int del_iterator(struct rib_iterators_mgr *rit, int idx) {
-    struct iterator_node *curr = NULL;
-
-    HASH_FIND_INT(rit->alloc_it, &idx, curr);
-    if (!curr) return 0;
-
-    /* delete and replace it in the free list */
-    /*HASH_DEL(rit->alloc_it, curr);
-    DL_INSERT_INORDER(rit->free_list, curr, it_node_cmp);
-    return 0;
-}
-
-void *get_iterator(struct rib_iterators_mgr *rit, int idx) {
-    struct iterator_node *curr = NULL;
-
-    HASH_FIND_INT(rit->alloc_it, &idx, curr);
-    if (!curr) return NULL;
-
-    return curr->data;
-}
-
-void destroy_iterators_mgr(struct rib_iterators_mgr *rit) {
-    struct iterator_node *curr, *tmp;
-    HASH_ITER(hh, rit->alloc_it, curr, tmp) {
-        HASH_DEL(rit->alloc_it, curr);
-        free_iterator_node(curr);
-    }
-
-    curr = tmp = NULL;
-    DL_FOREACH_SAFE(rit->free_list, curr, tmp) {
-        DL_DELETE(rit->free_list, curr);
-        free_iterator_node(curr);
-    }
-}*/
 
 static inline int is_u32_attr(word id) {
 
@@ -169,6 +50,9 @@ static inline int is_u32_attr(word id) {
     }
 
 }
+
+
+
 
 static eattr *eattr_prepend(struct linpool *pool, ea_list **e, int id UNUSED) {
 
@@ -600,7 +484,7 @@ struct bgp_route *get_bgp_route(context_t *ctx UNUSED, enum BGP_ROUTE_TYPE type 
 
 /* get the best bgp route exported to the kernel */
 /* impossible to quickly find the best route by looking at the BGP RIB  */
-/*
+
 #define afi2af(afi) ({\
   int __af__ = -1;           \
   switch(afi) {          \
@@ -616,20 +500,272 @@ struct bgp_route *get_bgp_route(context_t *ctx UNUSED, enum BGP_ROUTE_TYPE type 
   __af__;                      \
 })
 
-static struct rtable *get_bgp_get_fib_afi(u32 afi) {
+static struct bgp_proto *get_bgp_inst_by_peer(struct ubpf_peer_info *pinfo) {
     node *n;
-    struct krt_proto *p;
-    struct channel *c;
-
+    struct bgp_proto *p;
 
     WALK_LIST(n, proto_list) {
-        p = (struct krt_proto *) n;
-        if (p->p.proto->class == PROTOCOL_KERNEL) {
-            if (p->p.vrf == NULL) {
-                WALK_LIST(c, p->p.channels) {
-                    if (p->af == afi2af(afi)) {
-                        return c->table;
-                    }
+        p = (struct bgp_proto *) n;
+        if (p->p.proto->class == PROTOCOL_BGP) {
+            if (p->remote_id == pinfo->router_id) {
+                return p;
+            }
+        }
+    }
+    return NULL;
+}
+
+static struct rtable *get_bgp_table(struct bgp_proto *p, u32 afi) {
+    struct bgp_channel *c;
+
+    WALK_LIST(c, p->p.channels) {
+        if (BGP_AFI(c->afi) == afi) {
+            return c->c.table;
+        }
+    }
+    return NULL;
+}
+
+
+#define afi2net(afi) ({     \
+    int ret = -1;           \
+    switch(afi) {           \
+        case XBGP_AFI_IPV4: \
+            ret = NET_IP4;  \
+            break;          \
+        case XBGP_AFI_IPV6: \
+            ret = NET_IP6;  \
+            break;          \
+        default:            \
+            ret = -1;       \
+            break;          \
+    }                       \
+    ret;                    \
+})
+
+#define net2afi(net) ({          \
+    int ret = -1;                \
+    switch(net) {                \
+        case NET_IP4:            \
+            ret = XBGP_AFI_IPV4; \
+            break;               \
+        case NET_IP6:            \
+            ret = XBGP_AFI_IPV6; \
+            break;               \
+        default:                 \
+            ret = -1;            \
+            break;               \
+    }                            \
+    ret;                         \
+})
+
+#define pfx2netlen(pfx) ({\
+    int ret = -1;           \
+    switch ((pfx)->afi) { \
+        case XBGP_AFI_IPV4: \
+            ret = sizeof(net_addr_ip4); \
+            break;        \
+        case XBGP_AFI_IPV6: \
+            ret = sizeof(net_addr_ip6); \
+            break;        \
+        default:          \
+            ret = -1;     \
+            break;        \
+    }                     \
+    ret;                          \
+})
+
+int ubpf_pfx_to_net(struct ubpf_prefix *pfx, net_addr *addr) {
+    *addr = (net_addr) {
+            .type = afi2net(pfx->afi),
+            .pxlen = pfx->prefixlen,
+            .length = pfx2netlen(pfx),
+    };
+
+    switch (pfx->afi) {
+        case XBGP_AFI_IPV4:
+            ((net_addr_ip4*) &addr)->prefix = ntohl(*(uint32_t *)pfx->u);
+            break;
+        case XBGP_AFI_IPV6: {
+            struct ip6_addr ip6;
+            memcpy(&ip6, pfx->u, sizeof(struct ip6_addr));
+            ((net_addr_ip6 *) &addr)->prefix = ip6_ntoh(ip6);
+            break;
+        }
+        default:
+            return -1;
+            break;
+    }
+    return 0;
+}
+
+int net_to_ubpf_pfx(struct ubpf_prefix *pfx, net_addr *net) {
+
+    pfx->afi = net2afi(net->type);
+    pfx->prefixlen = net->pxlen;
+    pfx->safi = XBGP_SAFI_UNICAST; // by default we only handle UNICAST routes
+
+    switch (net->type) {
+        case NET_IP4: {
+            struct in_addr af4_addr;
+            ip4_addr ip4 =  ip4_hton(((net_addr_ip4 *) net)->prefix);
+            memcpy(&af4_addr.s_addr, &ip4, sizeof(ip4_addr));
+            break;
+        }
+        case NET_IP6: {
+            struct in6_addr af6_addr;
+            ip6_addr ip6 = ip6_hton(((net_addr_ip6 *) net)->prefix);
+            memcpy(&af6_addr, &ip6, sizeof(ip6_addr));
+            break;
+        }
+        default:
+            return -1;
+    }
+    return 0;
+}
+
+static struct bgp_proto *get_peer(ip_addr *ip) {
+    node *n;
+    struct bgp_proto *proto;
+
+    WALK_LIST(n, proto_list) {
+        proto = (struct bgp_proto *) n;
+        if (proto->p.proto->class == PROTOCOL_BGP) {
+            if (ipa_equal(*ip, proto->remote_ip)) {
+                return proto;
+            }
+        }
+    }
+    return NULL;
+}
+
+int fill_peer_info(struct ubpf_peer_info *pinfo, rta *rta) {
+    struct bgp_proto *proto;
+
+    proto = get_peer(&rta->from);
+    if (proto) {
+        /* the route is originated from BGP */
+        pinfo->router_id = proto->remote_id;
+        pinfo->as = proto->remote_as;
+        pinfo->peer_type = proto->is_interior ? IBGP_SESSION : EBGP_SESSION;
+    }
+
+    /* fill remote IP addr */
+    if (ipa_is_ip4(rta->from)) {
+        ip4_addr ip4;
+        ip4 = ipa_to_ip4(rta->from);
+
+        pinfo->addr.af = AF_INET;
+        pinfo->addr.addr.in.s_addr = ip4_hton(ip4);
+
+    } else {
+        ip6_addr ip6, ip6_n;
+        ip6 = ipa_to_ip6(rta->from);
+        ip6_n = ip6_hton(ip6);
+
+        pinfo->addr.af = AF_INET6;
+        memcpy(&pinfo->addr.addr.in6, &ip6_n, sizeof(pinfo->addr.addr.in6));
+    }
+
+    pinfo->local_bgp_session = NULL;
+
+    return 0;
+}
+
+struct bgp_route *bird_rte_to_ubpf_route(context_t *ctx, rte *rte) {
+    struct bgp_route *bgp_route;
+    int i, nb_attr;
+    ea_list *ea;
+    eattr *e;
+    uint code;
+    struct path_attribute *p_attr;
+
+    bgp_route = __ctx_malloc(ctx, sizeof(*bgp_route));
+    if (!bgp_route) return NULL;
+
+    if (net_to_ubpf_pfx(&bgp_route->pfx, rte->net->n.addr) != 0) {
+        return NULL;
+    }
+
+    bgp_route->type = rte->attrs->source; // todo change with xBGP compatible representation
+    bgp_route->peer_info = __ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
+    if (!bgp_route->peer_info){
+        return NULL;
+    }
+
+    fill_peer_info(bgp_route->peer_info, rte->attrs);
+
+    bgp_route->uptime = rte->lastmod; // clock is monotonic
+
+    bgp_route->attr_nb = rte->attrs->eattrs->count;
+    nb_attr = bgp_route->attr_nb;
+
+    bgp_route->attr = __ctx_malloc(ctx, sizeof(struct path_attribute *) * nb_attr);
+    if (!bgp_route->attr) { return NULL; }
+
+    for (i = 0; i < nb_attr; i++) {
+        e = &rte->attrs->eattrs->attrs[i];
+
+        if (EA_PROTO(e->id) == PROTOCOL_BGP) {
+            code = EA_ID(e->id);
+
+            p_attr = bird_to_vm_attr(ctx, e);
+            if (!p_attr) {
+                // un recognized ?
+            } else {
+                bgp_route->attr[0] = p_attr;
+            }
+        }
+    }
+
+    return bgp_route;
+}
+
+
+struct bgp_route *get_rib_out_entry(context_t *ctx, uint8_t af_family,
+                                    struct ubpf_prefix *pfx, struct ubpf_peer_info *pinfo) {
+    struct bgp_proto *p;
+    struct rtable *routing_table;
+    net_addr addr;
+    net *net;
+    rte *rte;
+
+    p = get_bgp_inst_by_peer(pinfo);
+
+    if (!p) { return NULL; }
+    routing_table = get_bgp_table(p, af_family);
+    if (!routing_table) { return NULL; }
+
+    if (ubpf_pfx_to_net(pfx, &addr) != 0) return NULL;
+
+    net = net_find(routing_table, &addr);
+    if (!net) { return NULL; }
+
+    /* the docs said the first route is the best one.
+     * i.e. the route used to route packets */
+    rte = net->routes;
+    return bird_rte_to_ubpf_route(ctx, rte);
+}
+
+struct rtable *get_bgp_fib(int afi, int safi) {
+    node *n;
+    struct bgp_proto *bgp_proto;
+    int i;
+
+    int bird_af = BGP_AF(afi, safi);
+
+    /* Warning:
+     * This gets the first AFI/SAFI compatible table.
+     * The fetched table may not be
+     * sync with the kernel FIB.
+     */
+    WALK_LIST(n, proto_list) {
+        bgp_proto = (struct bgp_proto *) n;
+        if (bgp_proto->p.proto->class == PROTOCOL_BGP) {
+            /* find table by afi */
+            for (i = 0; i < bgp_proto->channel_count; i++) {
+                if (bgp_proto->afi_map[i] == bird_af) {
+                    return bgp_proto->channel_map[i]->c.table;
                 }
             }
         }
@@ -637,65 +773,89 @@ static struct rtable *get_bgp_get_fib_afi(u32 afi) {
     return NULL;
 }
 
-static struct bgp_proto *get_peer(char *ip) {
-    
-}
-*/
+struct bird_iterator {
+    struct fib_iterator fit;
+    net *next;
+    struct rtable *rtable;
+};
 
 int new_rib_iterator(context_t *ctx, int afi, int safi) {
-    fprintf(stderr, "Not implemented yet %s\n", __func__ );
-    abort();
-    /*struct fib_iterator *fit;
+    static unsigned int uid = 0;
+
+    struct bird_iterator *biter;
+    struct bird_iterator biter_;
     struct rtable *table;
-    struct rib_iterators_mgr **rit;
-    struct rib_iterators_mgr *nrit;
 
-    static const char *fib_iterator = "fib_iterator";
+     unsigned int key = ++uid;
 
-    table = get_bgp_get_fib_afi(afi);
+    table = get_bgp_fib(afi, safi);
     if (!table) return -1;
 
-    rit = get_runtime_data(ctx->p, fib_iterator);
-    if (!rit) {
-        nrit = malloc(sizeof(*nrit));
-        if (!nrit) return -1;
-        init_rib_iterators(nrit);
+    biter = get_runtime_data_int_key(ctx->p, key);
+    if (!biter) {
+        biter = &biter_;
+        memset(biter, 0, sizeof(*biter));
 
-        if (new_runtime_data(ctx->p, fib_iterator,
-                             sizeof(fib_iterator) - 1,
-                             &nrit, sizeof(&nrit)) != 0) {
+        FIB_ITERATE_INIT(&biter->fit, &table->fib);
+        biter->rtable = table;
+        biter->next = NULL;
+
+        if ((biter = new_runtime_data_int_key(ctx->p, key,
+                             biter, sizeof(*biter))) == NULL) {
             return -1;
         }
     } else {
-        nrit = *rit;
+        return -1;
     }
 
-    fit = malloc(sizeof(*fit));
-    if (!fit) return -1;
+    /* loop once to get the next route to retrieve */
+    FIB_ITERATE_START(&biter->rtable->fib, &biter->fit, net, n) {
+        biter->next = n;
+        FIB_ITERATE_PUT(&biter->fit);
+        break;
+    } FIB_ITERATE_END;
 
-    FIB_ITERATE_INIT(fit, &table->fib);
 
-    FIB_ITERATE_START(&table->fib, fit, net, n) {
-
-        n->routes->attrs->src->proto->proto->class == PROTOCOL_BGP;
-
-    } FIB_ITERATE_END;*/
-
+    return key;
 }
 
 struct bgp_route *next_rib_route(context_t *ctx, unsigned int iterator_id) {
-    fprintf(stderr, "Not implemented yet %s\n", __func__ );
-    abort();
+    struct bird_iterator *biter;
+    biter = get_runtime_data_int_key(ctx->p, iterator_id);
+    if (!biter) return NULL;
+    struct rte *rte;
+    struct bgp_route *bgp_route;
+
+    if (!biter->next) return NULL;
+
+    rte = biter->next->routes;
+    bgp_route = bird_rte_to_ubpf_route(ctx, rte);
+
+    biter->next = NULL; /* reset biter->next if the loop is not taken */
+    FIB_ITERATE_START(&biter->rtable->fib, &biter->fit, net, n) {
+        biter->next = n;
+        FIB_ITERATE_PUT(&biter->fit);
+        break;
+    } FIB_ITERATE_END;
+
+    return bgp_route;
 }
 
 int rib_has_route(context_t *ctx, unsigned int iterator_id) {
-    fprintf(stderr, "Not implemented yet %s\n", __func__ );
-    abort();
+    struct bird_iterator *biter;
+    biter = get_runtime_data_int_key(ctx->p, iterator_id);
+    if (!biter) return -1;
+
+    return biter->next != NULL ? 0 : -1;
 }
 
 void rib_iterator_clean(context_t *ctx, unsigned int iterator_id) {
-    fprintf(stderr, "Not implemented yet %s\n", __func__ );
-    abort();
+    struct bird_iterator *biter;
+    biter = get_runtime_data_int_key(ctx->p, iterator_id);
+    if (!biter) return;
+
+    FIB_ITERATE_UNLINK(&biter->fit, &biter->rtable->fib);
+    del_runtime_data_int_key(ctx->p, iterator_id);
 }
 
 int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_peer_info *peer_info) {
@@ -704,13 +864,66 @@ int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_p
 }
 
 int get_vrf(context_t *ctx, struct vrf_info *vrf_info) {
+    int vrf_len;
+    struct iface *iface;
+    iface = get_arg_from_type(ctx, ARG_BGP_VRF);
+
+    if(!iface) return -1;
+
+    vrf_len = strnlen(iface->name, 16);
+
+    if (vrf_info->str_len < vrf_len) {
+        return -1;
+    }
+    strncpy(iface->name, vrf_info->name, vrf_len);
+
+    iface->name;
+
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();
 }
 
 int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, const char *peer_ip) {
-    fprintf(stderr, "Not implemented yet %s\n", __func__ );
-    abort();
+    ip4_addr ip4;
+    ip6_addr ip6;
+    ip_addr ip;
+    node *n;
+    struct bgp_proto *bgp_proto;
+    struct bgp_proto *found;
+    struct pending_msgs *msg;
+
+    if (ip4_pton(peer_ip, &ip4) == 1) {
+        ip = ipa_from_ip4(ip4);
+    } else if (ip6_pton(peer_ip, &ip6) == 1) {
+        ip = ipa_from_ip6(ip6);
+    } else {
+        return -1;
+    }
+
+    found = NULL;
+    WALK_LIST(n, proto_list) {
+        bgp_proto = (struct bgp_proto *) n;
+        if (bgp_proto->p.proto->class == PROTOCOL_BGP) {
+            if (ipa_equal(ip, bgp_proto->remote_ip)) {
+                found = bgp_proto;
+                break;
+            }
+        }
+    }
+    if (!found) { return -1; }
+
+    msg = malloc(sizeof(*msg) + message->buf_len);
+    if (!msg) return -1;
+    memset(msg, 0, sizeof (*msg));
+
+    add_tail(&found->xbgp_pending_msgs, &msg->n);
+
+    msg->buf_len = message->buf_len;
+    msg->type = message->type;
+    memcpy(msg->buf, message->buf, message->buf_len);
+
+    bgp_schedule_packet(found->conn, NULL, PKT_CUSTOM_XBGP);
+    return 0;
 }
 
 

@@ -326,6 +326,8 @@ struct bgp_proto {
   u32 last_error_code;			/* Error code of last error. BGP protocol errors
 					   are encoded as (bgp_err_code << 16 | bgp_err_subcode) */
   mem_pool *mempool;  /* extra configuration inherited from plugins */
+  /* xbgp related */
+  list xbgp_pending_msgs;
 };
 
 struct bgp_channel {
@@ -624,6 +626,7 @@ void bgp_update_next_hop(struct bgp_export_state *s, eattr *a, ea_list **to);
 #define PKT_NOTIFICATION	0x03
 #define PKT_KEEPALIVE		0x04
 #define PKT_ROUTE_REFRESH	0x05	/* [RFC2918] */
+#define PKT_CUSTOM_XBGP     0x1d    /* xBGP plugins has sthg to transmit */
 #define PKT_BEGIN_REFRESH	0x1e	/* Dummy type for BoRR packet [RFC7313] */
 #define PKT_SCHEDULE_CLOSE	0x1f	/* Used internally to schedule socket close */
 

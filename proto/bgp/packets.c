@@ -1331,7 +1331,7 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
           return;
       }
       // ON SUCCESS
-  })
+  });
 
     /* Prepare cached route attributes */
   if (s->cached_rta == NULL)
@@ -2791,6 +2791,29 @@ bgp_fire_tx(struct bgp_conn *conn)
     BGP_TRACE(D_PACKETS, "Sending KEEPALIVE");
     bgp_start_timer(conn->keepalive_timer, conn->keepalive_time);
     return bgp_send(conn, PKT_KEEPALIVE, BGP_HEADER_LENGTH);
+  }
+  else if (s & (1 << PKT_CUSTOM_XBGP))
+  {
+      int ret;
+      node *n;
+      struct pending_msgs *msg;
+
+      n = HEAD(p->xbgp_pending_msgs);
+      if (!n) {
+          fprintf(stderr, "WTF?\n");
+          return 0;
+      }
+      msg = (struct pending_msgs *) n;
+      memcpy(pkt, msg->buf, msg->buf_len);
+
+      rem_node(n);
+      free(msg);
+
+      if (HEAD(p->xbgp_pending_msgs) == NULL) {
+          conn->packets_to_send &= ~(1 << PKT_CUSTOM_XBGP);
+      }
+
+      return bgp_send(conn, msg->type, msg->buf_len);
   }
   else while (conn->channels_to_send)
   {

@@ -1207,7 +1207,7 @@ bgp_encode_attr(struct bgp_write_state *s, eattr *a, byte *buf, uint size)
       }
   }, {
       return VM_RETURN_VALUE; // number of bytes written
-  })
+  });
 }
 
 /**
@@ -1312,7 +1312,7 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
               WITHDRAW("Unknown attribute (code %u) - conflicting flags (%02x)", code, flags);
 
           bgp_decode_unknown(s, code, flags, data, len, to);
-      })
+      });
   }
 }
 
@@ -1703,7 +1703,7 @@ bgp_preexport(struct proto *P, rte **new, struct linpool *pool UNUSED)
           default:
               break;
       }
-  })
+  });
 
   /* if eBPF modified the route, the top eattrs linked-list differs */
   if (priv_e->attrs->eattrs != e->attrs->eattrs) {
@@ -1986,7 +1986,7 @@ bgp_rte_better(rte *new, rte *old)
          return 1;
      if (n < o)
          return 0;
- }, check_vm_val)
+ }, check_vm_val);
 
 
  CALL_REPLACE_ONLY(BGP_PRE_DECISION, this, ret_val_decision_process, {
@@ -1999,7 +1999,7 @@ bgp_rte_better(rte *new, rte *old)
      if (n2 > o2)
          return 0;
 
-     check_vm_val)
+     check_vm_val);
  }
 
 
@@ -2018,7 +2018,7 @@ bgp_rte_better(rte *new, rte *old)
       }
   },
       check_vm_val
-  )
+  );
 
   CALL_REPLACE_ONLY(BGP_USE_ORIGIN_DECISION, this, ret_val_decision_process, {
 
@@ -2032,7 +2032,7 @@ bgp_rte_better(rte *new, rte *old)
       if (n > o)
           return 0;
 
-  }, check_vm_val)
+  }, check_vm_val);
 
   /* RFC 4271 9.1.2.2. c) Compare MED's */
   /* Proper RFC 4271 path selection cannot be interpreted as finding
@@ -2066,7 +2066,7 @@ bgp_rte_better(rte *new, rte *old)
             default:
               break;
         }
-      })
+      });
   }
 
   /* RFC 4271 9.1.2.2. d) Prefer external peers */
@@ -2076,7 +2076,7 @@ bgp_rte_better(rte *new, rte *old)
           return 0;
       if (new_bgp->is_interior < old_bgp->is_interior)
           return 1;
-  }, check_vm_val)
+  }, check_vm_val);
 
 
   CALL_REPLACE_ONLY(BGP_IGP_COST_DECISION, this, ret_val_decision_process, {
@@ -2087,7 +2087,7 @@ bgp_rte_better(rte *new, rte *old)
           return 1;
       if (n > o)
           return 0;
-  }, check_vm_val)
+  }, check_vm_val);
 
 
   CALL_REPLACE_ONLY(BGP_ROUTER_ID_DECISION, this, ret_val_decision_process, {
@@ -2119,12 +2119,12 @@ bgp_rte_better(rte *new, rte *old)
           return 1;
       if (n > o)
           return 0;
-  }, check_vm_val)
+  }, check_vm_val);
 
   CALL_REPLACE_ONLY(BGP_POST_DECISION, this, ret_val_decision_process, {
       /* RFC 4271 9.1.2.2. g) Compare peer IP adresses */
       return ipa_compare(new_bgp->remote_ip, old_bgp->remote_ip) < 0;
-  }, check_vm_val)
+  }, check_vm_val);
 
   /* RFC 4271 9.1.2.2. g) Compare peer IP adresses */
   return ipa_compare(new_bgp->remote_ip, old_bgp->remote_ip) < 0;
