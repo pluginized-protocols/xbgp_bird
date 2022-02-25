@@ -2794,7 +2794,7 @@ bgp_fire_tx(struct bgp_conn *conn)
   }
   else if (s & (1 << PKT_CUSTOM_XBGP))
   {
-      int ret;
+      //int ret;
       node *n;
       struct pending_msgs *msg;
 

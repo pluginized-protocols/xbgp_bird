@@ -32,7 +32,7 @@ struct pending_msgs {
     u8 buf[0];
 };
 
-extern inline int ret_val_filter(uint64_t a);
+extern int ret_val_filter(uint64_t a);
 
 extern int ret_val_check_decode(uint64_t a);
 
