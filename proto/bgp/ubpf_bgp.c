@@ -20,7 +20,7 @@
 #include <xbgp_compliant_api/xbgp_plugin_host_api.h>
 #include <xbgp_compliant_api/xbgp_defs.h>
 
-#include "iface.h"
+#include "nest/iface.h"
 
 
 static inline int is_u32_attr(word id) {
@@ -877,7 +877,7 @@ int get_vrf(context_t *ctx, struct vrf_info *vrf_info) {
     }
     strncpy(iface->name, vrf_info->name, vrf_len);
 
-    iface->name;
+    //iface->name;
 
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();
@@ -930,4 +930,43 @@ int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, 
 int peer_session_reset(context_t *ctx, const char *peer_ip) {
     fprintf(stderr, "Not implemented yet %s\n", __func__ );
     abort();
+}
+
+/* check return value functions */
+
+inline int ret_val_filter(uint64_t a) {
+    switch (a) {
+        case PLUGIN_FILTER_REJECT:
+        case PLUGIN_FILTER_ACCEPT:
+            return 1;
+        case PLUGIN_FILTER_UNKNOWN:
+        default:
+            return 0;
+    }
+}
+
+inline int ret_val_check_decode(uint64_t a) {
+    return a == EXIT_FAILURE ? 0 : 1;
+}
+
+inline int ret_val_check_encode_attr(uint64_t val) {
+    if (val > 4096) return 0; // RFC 4271 says 4KB max TODO CHECK
+    if (val == 0) return 1;
+
+    return 1;
+}
+
+int UNUSED ret_val_decision_process(uint64_t val) {
+    switch (val) {
+        case BGP_ROUTE_TYPE_NEW:
+        case BGP_ROUTE_TYPE_OLD:
+            return 1;
+        case BGP_ROUTE_TYPE_UNKNOWN:
+        default:
+            return 0;
+    }
+}
+
+int ret_val_decode_bgp_message(uint64_t val) {
+    return val == EXIT_SUCCESS ? 1 : 0;
 }
