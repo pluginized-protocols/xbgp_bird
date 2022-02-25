@@ -1312,7 +1312,7 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
     return;
   }
 
-  entry_args_t args[] = {
+  entry_arg_t args[] = {
 
             {.arg = s->pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
             {.arg = &a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
@@ -3145,7 +3145,7 @@ bgp_rx_packet(struct bgp_conn *conn, byte *pkt, uint len)
   case PKT_KEEPALIVE:		return bgp_rx_keepalive(conn);
   case PKT_ROUTE_REFRESH:	return bgp_rx_route_refresh(conn, pkt, len);
   default: {
-      entry_args_t args[] = {
+      entry_arg_t args[] = {
               {.arg = pkt, .len=len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
               {.arg = &len, .len=sizeof(len), .kind=kind_primitive, .type=ARG_LENGTH},
               entry_arg_null
