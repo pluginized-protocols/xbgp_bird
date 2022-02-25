@@ -32,12 +32,12 @@ struct pending_msgs {
     u8 buf[0];
 };
 
-int ret_val_check_decode(uint64_t a);
+extern int ret_val_check_decode(uint64_t a);
 
-int ret_val_check_encode_attr(uint64_t val);
+extern int ret_val_check_encode_attr(uint64_t val);
 
-int ret_val_decision_process(uint64_t val);
+extern int ret_val_decision_process(uint64_t val);
 
-int ret_val_decode_bgp_message(uint64_t val);
+extern int ret_val_decode_bgp_message(uint64_t val);
 
 #endif //PLUGINIZED_BIRD_UBPF_BGP_H
