@@ -680,6 +680,8 @@ bgp_conn_enter_established_state(struct bgp_conn *conn)
 
   /* proto_notify_state() will likely call bgp_feed_begin(), setting c->feed_state */
 
+  init_list(&p->xbgp_pending_msgs);
+
   bgp_conn_set_state(conn, BS_ESTABLISHED);
   proto_notify_state(&p->p, PS_UP);
 }

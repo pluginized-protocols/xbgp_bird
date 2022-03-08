@@ -1312,7 +1312,7 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
     return;
   }
 
-  entry_args_t args[] = {
+  entry_arg_t args[] = {
 
             {.arg = s->pool, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = HOST_LINPOOL},
             {.arg = &a0->eattrs, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
@@ -1331,7 +1331,7 @@ bgp_rte_update(struct bgp_parse_state *s, net_addr *n, u32 path_id, rta *a0)
           return;
       }
       // ON SUCCESS
-  })
+  });
 
     /* Prepare cached route attributes */
   if (s->cached_rta == NULL)
@@ -2792,6 +2792,29 @@ bgp_fire_tx(struct bgp_conn *conn)
     bgp_start_timer(conn->keepalive_timer, conn->keepalive_time);
     return bgp_send(conn, PKT_KEEPALIVE, BGP_HEADER_LENGTH);
   }
+  else if (s & (1 << PKT_CUSTOM_XBGP))
+  {
+      //int ret;
+      node *n;
+      struct pending_msgs *msg;
+
+      n = HEAD(p->xbgp_pending_msgs);
+      if (!n) {
+          fprintf(stderr, "WTF?\n");
+          return 0;
+      }
+      msg = (struct pending_msgs *) n;
+      memcpy(pkt, msg->buf, msg->buf_len);
+
+      rem_node(n);
+      free(msg);
+
+      if (HEAD(p->xbgp_pending_msgs) == NULL) {
+          conn->packets_to_send &= ~(1 << PKT_CUSTOM_XBGP);
+      }
+
+      return bgp_send(conn, msg->type, msg->buf_len);
+  }
   else while (conn->channels_to_send)
   {
     c = bgp_get_channel_to_send(p, conn);
@@ -3122,7 +3145,7 @@ bgp_rx_packet(struct bgp_conn *conn, byte *pkt, uint len)
   case PKT_KEEPALIVE:		return bgp_rx_keepalive(conn);
   case PKT_ROUTE_REFRESH:	return bgp_rx_route_refresh(conn, pkt, len);
   default: {
-      entry_args_t args[] = {
+      entry_arg_t args[] = {
               {.arg = pkt, .len=len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
               {.arg = &len, .len=sizeof(len), .kind=kind_primitive, .type=ARG_LENGTH},
               entry_arg_null
