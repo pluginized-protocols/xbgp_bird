@@ -970,3 +970,11 @@ int UNUSED ret_val_decision_process(uint64_t val) {
 int ret_val_decode_bgp_message(uint64_t val) {
     return val == EXIT_SUCCESS ? 1 : 0;
 }
+
+int set_attr_to_route(context_t *ctx, struct path_attribute *attr, int rte) {
+    return -1;
+}
+
+struct bgp_rte_info *get_route_info(context_t *ctx) {
+    return 0;
+}
