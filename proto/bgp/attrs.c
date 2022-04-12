@@ -1284,36 +1284,37 @@ bgp_decode_attr(struct bgp_parse_state *s, uint code, uint flags, byte *data, ui
   }
   BIT32_SET(s->attrs_seen, code);
 
-  if (bgp_attr_known(code))
-  {
-    const struct bgp_attr_desc *desc = &bgp_attr_table[code];
+  entry_arg_t args[] = {
+            [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = ARG_CODE},
+            [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = ARG_FLAGS},
+            [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = ARG_DATA},
+            [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = ARG_LENGTH},
+            [4] = {.arg = to, .len = sizeof(to), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
+            [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
+            entry_arg_null
+  };
 
-    /* Handle conflicting flags; RFC 7606 3 (c) */
-    if (((flags ^ desc->flags) & (BAF_OPTIONAL | BAF_TRANSITIVE)) &&
-	!(desc->flags & BAF_DECODE_FLAGS))
-      WITHDRAW("Malformed %s attribute - conflicting flags (%02x)", desc->name, flags);
+  CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, ret_val_check_decode, {
+      if (bgp_attr_known(code))
+      {
+          const struct bgp_attr_desc *desc = &bgp_attr_table[code];
 
-    desc->decode(s, code, flags, data, len, to);
-  }
-  else /* Unknown attribute */
-  {
-      entry_arg_t args[] = {
-              [0] = {.arg = &code, .len = sizeof(code), .kind = kind_primitive, .type = ARG_CODE},
-              [1] = {.arg = &flags, .len = sizeof(flags), .kind = kind_primitive, .type = ARG_FLAGS},
-              [2] = {.arg = data, .len = len, .kind = kind_ptr, .type = ARG_DATA},
-              [3] = {.arg = &len, .len = sizeof(len), .kind = kind_primitive, .type = ARG_LENGTH},
-              [4] = {.arg = to, .len = sizeof(to), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
-              [5] = {.arg = s, .len = sizeof(s), .kind = kind_hidden, .type = PARSE_STATE},
-              [6] = {.arg = s->proto, .len=sizeof(uintptr_t), .kind = kind_hidden, .type = BGP_SRC_INFO},
-              entry_arg_null
-      };
-      CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, ret_val_check_decode, {
+          /* Handle conflicting flags; RFC 7606 3 (c) */
+          if (((flags ^ desc->flags) & (BAF_OPTIONAL | BAF_TRANSITIVE)) &&
+              !(desc->flags & BAF_DECODE_FLAGS))
+              WITHDRAW("Malformed %s attribute - conflicting flags (%02x)", desc->name, flags);
+
+          desc->decode(s, code, flags, data, len, to);
+      }
+      else /* Unknown attribute */
+      {
           if (!(flags & BAF_OPTIONAL))
               WITHDRAW("Unknown attribute (code %u) - conflicting flags (%02x)", code, flags);
 
           bgp_decode_unknown(s, code, flags, data, len, to);
-      });
-  }
+      }
+  });
 }
 
 /**
