@@ -687,7 +687,7 @@ struct bgp_route *bird_rte_to_ubpf_route(context_t *ctx, rte *rte) {
         return NULL;
     }
 
-    bgp_route->type = rte->attrs->source; // todo change with xBGP compatible representation
+    bgp_route->route_info.type = rte->attrs->source; // todo change with xBGP compatible representation
     bgp_route->peer_info = ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
     if (!bgp_route->peer_info){
         return NULL;
@@ -695,7 +695,7 @@ struct bgp_route *bird_rte_to_ubpf_route(context_t *ctx, rte *rte) {
 
     fill_peer_info(bgp_route->peer_info, rte->attrs);
 
-    bgp_route->uptime = rte->lastmod; // clock is monotonic
+    bgp_route->route_info.uptime = rte->lastmod; // clock is monotonic
 
     bgp_route->attr_nb = rte->attrs->eattrs->count;
     nb_attr = bgp_route->attr_nb;
