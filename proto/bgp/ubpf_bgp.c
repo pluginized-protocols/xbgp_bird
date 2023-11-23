@@ -978,3 +978,7 @@ int set_attr_to_route(context_t *ctx, struct path_attribute *attr, int rte) {
 struct bgp_rte_info *get_route_info(context_t *ctx) {
     return 0;
 }
+
+struct bgp_route *get_route_sent_to_peer(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_peer_info *info) {
+    return NULL;
+}
